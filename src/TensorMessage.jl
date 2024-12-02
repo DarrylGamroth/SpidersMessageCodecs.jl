@@ -1,5 +1,7 @@
 include("../gen/tensor/Tensor.jl")
 
+using LinearAlgebra
+
 function Base.eltype(T::Tensor.Format.SbeEnum)
     T == Tensor.Format.UINT8 ? UInt8 :
     T == Tensor.Format.INT8 ? Int8 :
@@ -27,6 +29,10 @@ function inv_eltype(T::Type{<:Real})
     T == Float64 ? Tensor.Format.FLOAT64 :
     throw(ArgumentError("unexpected type"))
 end
+
+order(::Type{<:Adjoint}) = Tensor.Order.ROW
+order(::Type{<:Transpose})  = Tensor.Order.ROW
+order(::Type{<:AbstractArray}) = Tensor.Order.COLUMN
 
 abstract type AbstractTensorMessageArray{T,N,O} end
 
@@ -85,12 +91,8 @@ function Tensor.values(::Type{<:AbstractArray}, m::Tensor.TensorMessage)
     return Tensor.values(AbstractTensorMessageArray{T,N,O}, m)
 end
 
-function Tensor.values(::Type{<:AbstractArray{T,N}}, m::Tensor.TensorMessage) where {T,N}
-    Tensor.values(AbstractTensorMessageArray{T,N,Tensor.Order.COLUMN}, m)
-end
-
-function Tensor.values(::Type{<:Adjoint{T,A}}, m::Tensor.TensorMessage) where {T,N,A<:AbstractArray{T,N}}
-    Tensor.values(AbstractTensorMessageArray{T,N,Tensor.Order.ROW}, m)
+function Tensor.values(::Type{A}, m::Tensor.TensorMessage) where {T,N,A<:AbstractArray{T,N}}
+    Tensor.values(AbstractTensorMessageArray{T,N,order(A)}, m)
 end
 
 @inline function Tensor.values!(::Type{<:AbstractTensorMessageArray{T,N,O}}, m::Tensor.TensorMessage, shape::NTuple{N,Int}) where {T,N,O}
@@ -105,23 +107,14 @@ end
     return O == Tensor.Order.COLUMN ? array : array'
 end
 
-@inline function Tensor.values!(::Type{<:AbstractArray{T,N}}, m::Tensor.TensorMessage, shape::NTuple{N,Int}) where {T,N}
-    Tensor.values!(AbstractTensorMessageArray{T,N,Tensor.Order.COLUMN}, m, shape)
-end
-
-@inline function Tensor.values!(::Type{<:Adjoint{T,A}}, m::Tensor.TensorMessage, shape::NTuple{N,Int}) where {T,N,A<:AbstractArray{T,N}}
-    Tensor.values!(AbstractTensorMessageArray{T,N,Tensor.Order.ROW}, m, shape)
+@inline function Tensor.values!(::Type{A}, m::Tensor.TensorMessage, shape::NTuple{N,Int}) where {T,N,A<:AbstractArray{T,N}}
+    Tensor.values!(AbstractTensorMessageArray{T,N,order(A)}, m, shape)
 end
 
 @inline function Tensor.values!(t::Type{<:AbstractTensorMessageArray{T,N,O}}, m::Tensor.TensorMessage, src::AbstractArray{T,N}) where {T,N,O}
     Tensor.values!(t, m, size(src)) .= src
 end
 
-function Tensor.values!(m::Tensor.TensorMessage, src::AbstractArray{T,N}) where {T,N}
-    Tensor.values!(AbstractTensorMessageArray{T,N,Tensor.Order.COLUMN}, m, src)
+function Tensor.values!(m::Tensor.TensorMessage, src::A) where {T,N,A<:AbstractArray{T,N}}
+    Tensor.values!(AbstractTensorMessageArray{T,N,order(A)}, m, src)
 end
-
-function Tensor.values!(m::Tensor.TensorMessage, src::Adjoint{T,A}) where {T,N,A<:AbstractArray{T,N}}
-    Tensor.values!(AbstractTensorMessageArray{T,N,Tensor.Order.ROW}, m, src)
-end
-
