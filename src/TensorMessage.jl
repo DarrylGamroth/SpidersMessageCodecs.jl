@@ -31,7 +31,7 @@ function inv_eltype(T::Type{<:Real})
 end
 
 order(::Type{<:Adjoint}) = Tensor.Order.ROW
-order(::Type{<:Transpose})  = Tensor.Order.ROW
+order(::Type{<:Transpose}) = Tensor.Order.ROW
 order(::Type{<:AbstractArray}) = Tensor.Order.COLUMN
 
 abstract type AbstractTensorMessageArray{T,N,O} end
