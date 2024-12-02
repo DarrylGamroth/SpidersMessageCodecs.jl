@@ -1,8 +1,5 @@
 include("../gen/tensor/Tensor.jl")
 
-# FIXME Rename values in the SBE schema to array, or add an methods using the Semantic Type field
-# Just empty ones like Tensor."semantic_type" so it can be overridden 
-
 function Base.eltype(T::Tensor.Format.SbeEnum)
     T == Tensor.Format.UINT8 ? UInt8 :
     T == Tensor.Format.INT8 ? Int8 :
@@ -79,7 +76,7 @@ end
     return O == Tensor.Order.COLUMN ? array : array'
 end
 
-function Tensor.values(::Type{<:AbstractTensorMessageArray}, m::Tensor.TensorMessage)
+function Tensor.values(::Type{<:AbstractArray}, m::Tensor.TensorMessage)
     Tensor.sbe_rewind!(m)
     T = Base.eltype(Tensor.format(m))
     O = Tensor.order(m)
@@ -88,9 +85,13 @@ function Tensor.values(::Type{<:AbstractTensorMessageArray}, m::Tensor.TensorMes
     return Tensor.values(AbstractTensorMessageArray{T,N,O}, m)
 end
 
-# function Tensor.values_copyto!(dest::AbstractArray{T,N}, m::Tensor.TensorMessage)
-#     copyto!(dest, Tensor.values(AbstractTensorMessageArray{T,N,Tensor.Order.COLUMN}, m))
-# end
+function Tensor.values(::Type{<:AbstractArray{T,N}}, m::Tensor.TensorMessage) where {T,N}
+    Tensor.values(AbstractTensorMessageArray{T,N,Tensor.Order.COLUMN}, m)
+end
+
+function Tensor.values(::Type{<:Adjoint{T,A}}, m::Tensor.TensorMessage) where {T,N,A<:AbstractArray{T,N}}
+    Tensor.values(AbstractTensorMessageArray{T,N,Tensor.Order.ROW}, m)
+end
 
 @inline function Tensor.values!(::Type{<:AbstractTensorMessageArray{T,N,O}}, m::Tensor.TensorMessage, shape::NTuple{N,Int}) where {T,N,O}
     Tensor.sbe_rewind!(m)
@@ -104,7 +105,15 @@ end
     return O == Tensor.Order.COLUMN ? array : array'
 end
 
-function Tensor.values!(t::Type{<:AbstractTensorMessageArray{T,N,O}}, m::Tensor.TensorMessage, src::AbstractArray{T,N}) where {T,N,O}
+@inline function Tensor.values!(::Type{<:AbstractArray{T,N}}, m::Tensor.TensorMessage, shape::NTuple{N,Int}) where {T,N}
+    Tensor.values!(AbstractTensorMessageArray{T,N,Tensor.Order.COLUMN}, m, shape)
+end
+
+@inline function Tensor.values!(::Type{<:Adjoint{T,A}}, m::Tensor.TensorMessage, shape::NTuple{N,Int}) where {T,N,A<:AbstractArray{T,N}}
+    Tensor.values!(AbstractTensorMessageArray{T,N,Tensor.Order.ROW}, m, shape)
+end
+
+@inline function Tensor.values!(t::Type{<:AbstractTensorMessageArray{T,N,O}}, m::Tensor.TensorMessage, src::AbstractArray{T,N}) where {T,N,O}
     Tensor.values!(t, m, size(src)) .= src
 end
 
