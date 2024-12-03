@@ -1,4 +1,4 @@
-name = "SpidersMessageCodec"
+name = "SpidersMessageCodecs"
 uuid = "9d30338e-3560-4e91-a403-22803ac6b660"
 authors = ["Darryl Gamroth <dgamroth@rubus.ca>"]
 version = "0.1.0"

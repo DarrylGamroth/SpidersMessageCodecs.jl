@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sbe:messageSchema xmlns:sbe="http://fixprotocol.io/2016/sbe"
+    xmlns:xi="http://www.w3.org/2001/XInclude"
+    package="event"
+    id="6"
+    version="0"
+    semanticVersion=""
+    description="Schema for event messages"
+    byteOrder="littleEndian">
+    <xi:include href="common-types.xml" />
+    <xi:include href="spiders-types.xml" />
+    <types>
+        <enum name="Format" decscription="Event Format" encodingType="int8">
+            <validValue name="NOTHING">0</validValue>
+            <validValue name="UINT8">1</validValue>
+            <validValue name="INT8">2</validValue>
+            <validValue name="UINT16">3</validValue>
+            <validValue name="INT16">4</validValue>
+            <validValue name="UINT32">5</validValue>
+            <validValue name="INT32">6</validValue>
+            <validValue name="FLOAT32">7</validValue>
+            <validValue name="UINT64">8</validValue>
+            <validValue name="INT64">9</validValue>
+            <validValue name="FLOAT64">10</validValue>
+            <validValue name="BOOLEAN">11</validValue>
+            <validValue name="STRING">12</validValue>
+            <validValue name="BYTES">13</validValue>
+            <validValue name="SYMBOL">14</validValue>
+            <validValue name="SBE">15</validValue>
+        </enum>
+        <type name="Key" primitiveType="char" length="32"
+            description="Key field to identify message" />
+    </types>
+    <sbe:message name="EventMessage"
+        id="1"
+        description="Event Message Format">
+        <field name="header"
+            id="1"
+            type="SpidersMessageHeader" />
+        <field name="format"
+            id="2"
+            description="Data format for value"
+            type="Format" />
+        <field name="reserved1"
+            id="9"
+            description="Reserved field"
+            type="Pad3" />
+        <field name="key"
+            id="10"
+            description="Key field for event"
+            type="Key" />
+        <data name="value"
+            id="20"
+            description="Byte buffer containing value"
+            type="varDataEncoding" />
+    </sbe:message>
+</sbe:messageSchema>
