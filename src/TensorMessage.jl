@@ -13,6 +13,8 @@ function Base.eltype(T::Tensor.Format.SbeEnum)
     T == Tensor.Format.INT64 ? Int64 :
     T == Tensor.Format.FLOAT32 ? Float32 :
     T == Tensor.Format.FLOAT64 ? Float64 :
+    T == Tensor.Format.BOOLEAN ? Bool :
+    T == Tensor.Format.BITS ? BitArray :
     throw(ArgumentError("unexpected format"))
 end
 
@@ -27,6 +29,8 @@ function inv_eltype(T::Type{<:Real})
     T == Int64 ? Tensor.Format.INT64 :
     T == Float32 ? Tensor.Format.FLOAT32 :
     T == Float64 ? Tensor.Format.FLOAT64 :
+    T == Bool ? Tensor.Format.BOOLEAN :
+    T <: BitArray ? Tensor.Format.BITS :
     throw(ArgumentError("unexpected type"))
 end
 
