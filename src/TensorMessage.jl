@@ -1,4 +1,4 @@
-include("../gen/tensor/Tensor.jl")
+include("../ext/tensor/Tensor.jl")
 
 using LinearAlgebra
 
