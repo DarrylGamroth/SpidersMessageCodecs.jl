@@ -36,6 +36,9 @@ order(::Type{<:AbstractArray}) = Tensor.Order.COLUMN
 
 abstract type AbstractTensorMessageArray{T,N,O} end
 
+Tensor.shape(T::Type{<:Real}, m::Tensor.TensorMessage) = reinterpret(T, Tensor.shape(m))
+Tensor.shape!(T::Type{<:Real}, m::Tensor.TensorMessage, len::Int) = reinterpret(T, Tensor.shape!(m, sizeof(T) * len))
+
 @inline function Tensor.shape(::Type{NTuple{N}}, m::Tensor.TensorMessage) where {N}
     shape = Tensor.shape(Int32, m)
     ntuple(i -> shape[i], Val(N))
@@ -48,6 +51,9 @@ end
 @inline function Tensor.shape!(m::Tensor.TensorMessage, shape::NTuple{N,Int}) where {N}
     Tensor.shape!(Int32, m, length(shape)) .= shape
 end
+
+Tensor.offset(T::Type{<:Real}, m::Tensor.TensorMessage) = reinterpret(T, Tensor.offset(m))
+Tensor.offset!(T::Type{<:Real}, m::Tensor.TensorMessage, len::Int) = reinterpret(T, Tensor.offset!(m, sizeof(T) * len))
 
 @inline function Tensor.offset(::Type{NTuple{N,T}}, m::Tensor.TensorMessage) where {N,T}
     offset = Tensor.offset(Int32, m)
@@ -118,3 +124,6 @@ end
 function Tensor.values!(m::Tensor.TensorMessage, src::A) where {T,N,A<:AbstractArray{T,N}}
     Tensor.values!(AbstractTensorMessageArray{T,N,order(A)}, m, src)
 end
+
+Tensor.values(T::Type{<:Real}, m::Tensor.TensorMessage) = reinterpret(T, Tensor.values(m))
+Tensor.values!(T::Type{<:Real}, m::Tensor.TensorMessage, len::Int) = reinterpret(T, Tensor.values!(m, sizeof(T) * len))
