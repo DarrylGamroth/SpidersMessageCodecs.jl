@@ -6,15 +6,17 @@ struct SpidersMessageHeader{T<:AbstractArray{UInt8}}
     offset::Int64
     acting_version::Int64
     function SpidersMessageHeader(buffer::T, offset=0, acting_version=0) where {T}
-        checkbounds(buffer, offset + 1 + 64)
         new{T}(buffer, offset, acting_version)
     end
 end
+const SpidersMessageHeaderDecoder = SpidersMessageHeader
+const SpidersMessageHeaderEncoder = SpidersMessageHeader
 
 SpidersMessageHeader() = SpidersMessageHeader(UInt8[])
 
-sbe_buffer(m::SpidersMessageHeader) = @inbounds view(m.buffer, m.offset+1:m.offset+64)
+sbe_buffer(m::SpidersMessageHeader) = m.buffer
 sbe_offset(m::SpidersMessageHeader) = m.offset
+sbe_decoded_buffer(m::SpidersMessageHeader) = view(m.buffer, m.offset+1:m.offset+64)
 sbe_acting_version(m::SpidersMessageHeader) = m.acting_version
 sbe_encoded_length(::SpidersMessageHeader) = 64
 sbe_schema_id(::SpidersMessageHeader) = 1
@@ -25,6 +27,7 @@ function channelRcvTimestampNs_meta_attribute(::SpidersMessageHeader, meta_attri
     error(lazy"unknown attribute: $meta_attribute")
 end
 channelRcvTimestampNs_id(::SpidersMessageHeader) = -1
+channelRcvTimestampNs_since_version(::SpidersMessageHeader) = 0
 channelRcvTimestampNs_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= 0
 channelRcvTimestampNs_encoding_offset(::SpidersMessageHeader) = 0
 channelRcvTimestampNs_null_value(::SpidersMessageHeader) = Int64(-9223372036854775808)
@@ -32,16 +35,17 @@ channelRcvTimestampNs_min_value(::SpidersMessageHeader) = Int64(-922337203685477
 channelRcvTimestampNs_max_value(::SpidersMessageHeader) = Int64(9223372036854775807)
 channelRcvTimestampNs_encoding_length(::SpidersMessageHeader) = 8
 
-@inline function channelRcvTimestampNs(m::SpidersMessageHeader)
+@inline function channelRcvTimestampNs(m::SpidersMessageHeaderDecoder)
     return decode_le(Int64, m.buffer, m.offset + 0)
 end
-@inline channelRcvTimestampNs!(m::SpidersMessageHeader, value) = encode_le(Int64, m.buffer, m.offset + 0, value)
+@inline channelRcvTimestampNs!(m::SpidersMessageHeaderEncoder, value) = encode_le(Int64, m.buffer, m.offset + 0, value)
 
 function channelSndTimestampNs_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
 channelSndTimestampNs_id(::SpidersMessageHeader) = -1
+channelSndTimestampNs_since_version(::SpidersMessageHeader) = 0
 channelSndTimestampNs_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= 0
 channelSndTimestampNs_encoding_offset(::SpidersMessageHeader) = 8
 channelSndTimestampNs_null_value(::SpidersMessageHeader) = Int64(-9223372036854775808)
@@ -49,16 +53,17 @@ channelSndTimestampNs_min_value(::SpidersMessageHeader) = Int64(-922337203685477
 channelSndTimestampNs_max_value(::SpidersMessageHeader) = Int64(9223372036854775807)
 channelSndTimestampNs_encoding_length(::SpidersMessageHeader) = 8
 
-@inline function channelSndTimestampNs(m::SpidersMessageHeader)
+@inline function channelSndTimestampNs(m::SpidersMessageHeaderDecoder)
     return decode_le(Int64, m.buffer, m.offset + 8)
 end
-@inline channelSndTimestampNs!(m::SpidersMessageHeader, value) = encode_le(Int64, m.buffer, m.offset + 8, value)
+@inline channelSndTimestampNs!(m::SpidersMessageHeaderEncoder, value) = encode_le(Int64, m.buffer, m.offset + 8, value)
 
 function timestampNs_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
 timestampNs_id(::SpidersMessageHeader) = -1
+timestampNs_since_version(::SpidersMessageHeader) = 0
 timestampNs_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= 0
 timestampNs_encoding_offset(::SpidersMessageHeader) = 16
 timestampNs_null_value(::SpidersMessageHeader) = Int64(-9223372036854775808)
@@ -66,16 +71,17 @@ timestampNs_min_value(::SpidersMessageHeader) = Int64(-9223372036854775807)
 timestampNs_max_value(::SpidersMessageHeader) = Int64(9223372036854775807)
 timestampNs_encoding_length(::SpidersMessageHeader) = 8
 
-@inline function timestampNs(m::SpidersMessageHeader)
+@inline function timestampNs(m::SpidersMessageHeaderDecoder)
     return decode_le(Int64, m.buffer, m.offset + 16)
 end
-@inline timestampNs!(m::SpidersMessageHeader, value) = encode_le(Int64, m.buffer, m.offset + 16, value)
+@inline timestampNs!(m::SpidersMessageHeaderEncoder, value) = encode_le(Int64, m.buffer, m.offset + 16, value)
 
 function correlationId_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
 correlationId_id(::SpidersMessageHeader) = -1
+correlationId_since_version(::SpidersMessageHeader) = 0
 correlationId_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= 0
 correlationId_encoding_offset(::SpidersMessageHeader) = 24
 correlationId_null_value(::SpidersMessageHeader) = Int64(-9223372036854775808)
@@ -83,16 +89,17 @@ correlationId_min_value(::SpidersMessageHeader) = Int64(-9223372036854775807)
 correlationId_max_value(::SpidersMessageHeader) = Int64(9223372036854775807)
 correlationId_encoding_length(::SpidersMessageHeader) = 8
 
-@inline function correlationId(m::SpidersMessageHeader)
+@inline function correlationId(m::SpidersMessageHeaderDecoder)
     return decode_le(Int64, m.buffer, m.offset + 24)
 end
-@inline correlationId!(m::SpidersMessageHeader, value) = encode_le(Int64, m.buffer, m.offset + 24, value)
+@inline correlationId!(m::SpidersMessageHeaderEncoder, value) = encode_le(Int64, m.buffer, m.offset + 24, value)
 
 function tag_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
 tag_id(::SpidersMessageHeader) = -1
+tag_since_version(::SpidersMessageHeader) = 0
 tag_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= 0
 tag_encoding_offset(::SpidersMessageHeader) = 32
 tag_null_value(::SpidersMessageHeader) = UInt8(0x0)
@@ -102,26 +109,28 @@ tag_encoding_length(::SpidersMessageHeader) = 32
 tag_length(::SpidersMessageHeader) = 32
 tag_eltype(::SpidersMessageHeader) = UInt8
 
-@inline function tag(m::SpidersMessageHeader)
-    return @inbounds mappedarray(ltoh, htol, reinterpret(UInt8, view(m.buffer, m.offset+32+1:m.offset+32+sizeof(UInt8)*32)))
+@inline function tag(m::SpidersMessageHeaderDecoder)
+    return mappedarray(ltoh, reinterpret(UInt8, view(m.buffer, m.offset+32+1:m.offset+32+sizeof(UInt8)*32)))
 end
 
-@inline function tag_static(m::SpidersMessageHeader)
-    return @inbounds mappedarray(ltoh, reinterpret(SVector{32,UInt8}, view(m.buffer, m.offset+32+1:m.offset+32+sizeof(UInt8)*32))[])
+@inline function tag(::Type{<:SVector},m::SpidersMessageHeaderDecoder)
+    return mappedarray(ltoh, reinterpret(SVector{32,UInt8}, view(m.buffer, m.offset+32+1:m.offset+32+sizeof(UInt8)*32))[])
 end
 
-@inline function tag(T::Type{<:AbstractString}, m::SpidersMessageHeader)
-    value = @inbounds view(m.buffer, m.offset+1+32:m.offset+32+sizeof(UInt8)*32)
-    return T(rstrip_nul(value))
+@inline function tag(::Type{<:AbstractString}, m::SpidersMessageHeaderDecoder)
+    value = view(m.buffer, m.offset+1+32:m.offset+32+sizeof(UInt8)*32)
+    return StringView(rstrip_nul(value))
 end
 
-tag_as_string(m::SpidersMessageHeader) = tag(StringView, m)
+@inline function tag!(m::SpidersMessageHeaderEncoder)
+    return mappedarray(ltoh, htol, reinterpret(UInt8, view(m.buffer, m.offset+32+1:m.offset+32+sizeof(UInt8)*32)))
+end
 
-@inline function tag!(m::SpidersMessageHeader, value)
+@inline function tag!(m::SpidersMessageHeaderEncoder, value)
     copyto!(mappedarray(ltoh, htol, reinterpret(UInt8, view(m.buffer, m.offset+32+1:m.offset+32+sizeof(UInt8)*32))), value)
 end
 
-function print_fields(io::IO, writer::SpidersMessageHeader{T}) where {T}
+function Base.show(io::IO, writer::SpidersMessageHeader{T}) where {T}
     println(io, "SpidersMessageHeader view over a type $T")
     print(io, "channelRcvTimestampNs: ")
     print(io, channelRcvTimestampNs(writer))

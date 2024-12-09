@@ -1,5 +1,8 @@
 include("../ext/event/Event.jl")
 
+using StringViews
+using UnsafeArrays
+
 # Add abstract type for all SBE messages so the message type can passed to the Tuple or NamedTuple
 # or retrieve
 
@@ -43,11 +46,20 @@ function event_eltype(::Type{T}) where {T}
     throw(ArgumentError("unexpected type"))
 end
 
+function Base.convert(::Type{<:UnsafeArray{T}}, s::Symbol) where {T}
+    p = Base.unsafe_convert(Ptr{T}, s)
+    p == C_NULL && throw(ArgumentError("invalid symbol"))
+    len = @ccall strlen(p::Ptr{T})::Csize_t
+    UnsafeArray(p, (Int64(len),))
+end
+
+Event.key(::Type{Symbol}, m::Event.EventMessage) = Symbol(Event.key(String, m))
+
 Event.value(::Type{Nothing}, m::Event.EventMessage) = nothing
-Event.value(::Type{AbstractString}, m::Event.EventMessage) = StringView(Event.value(m))
-Event.value(::Type{Symbol}, m::Event.EventMessage) = Symbol(Event.value(m))
+Event.value(::Type{<:AbstractString}, m::Event.EventMessage) = StringView(Event.value(m))
+Event.value(::Type{Symbol}, m::Event.EventMessage) = Symbol(Event.value(String, m))
 Event.value(::Type{T}, m::Event.EventMessage) where {T<:Real} = reinterpret(T, Event.value(m))[]
-Event.value(::Type{AbstractVector{UInt8}}, m::Event.EventMessage) = Event.value(m)
+Event.value(::Type{<:AbstractVector{UInt8}}, m::Event.EventMessage) = Event.value(m)
 
 function Event.value(::Type{Tuple}, m::Event.EventMessage)
     Event.sbe_rewind!(m)
@@ -59,11 +71,11 @@ function Event.value(::Type{Tuple{T}}, m::Event.EventMessage) where {T}
     Event.sbe_rewind!(m)
     type = Base.eltype(Event.format(m))
     T <: type || throw(ArgumentError("unexpected type, expected $T got $type"))
-    (Event.key_as_string(m), Event.value(T, m))
+    (key=Event.key(String, m), value=Event.value(T, m))
 end
 
 @inline function key!(m::Event.EventMessage, key)
-    buf = Event.key(m)
+    buf = Event.key!(m)
     fill!(buf, 0)
     copyto!(buf, key)
 end
@@ -87,19 +99,28 @@ function Event.value!(m::Event.EventMessage, key::AbstractString, value::T) wher
     Event.sbe_rewind!(m)
     Event.format!(m, event_eltype(T))
     key!(m, key)
-    dest = Event.value!(m, length(value))
-    copyto!(dest, value)
+    Event.value!(m, value)
 end
-
-# Warning, this function allocates a new buffer for the string
-Event.value!(m::Event.EventMessage, key::AbstractString, value::Symbol) = Event.value!(m, key, String(value))
 
 function Event.value!(m::Event.EventMessage, key::AbstractString, value::T) where {T<:AbstractVector{UInt8}}
     Event.sbe_rewind!(m)
     Event.format!(m, event_eltype(T))
     key!(m, key)
-    dest = Event.value!(m, length(value))
-    copyto!(dest, value)
+    Event.value!(m, value)
+end
+
+function Event.value!(m::Event.EventMessage, key::AbstractString, value::Symbol)
+    Event.sbe_rewind!(m)
+    Event.format!(m, event_eltype(Symbol))
+    key!(m, key)
+    Event.value!(m, convert(UnsafeArray{UInt8}, value))
+end
+
+function Event.value!(m::Event.EventMessage, key::AbstractString, value::T) where {T<:Event.EventMessage}
+    Event.sbe_rewind!(m)
+    Event.format!(m, event_eltype(T))
+    key!(m, key)
+    Event.value!(m, value)
 end
 
 Event.value!(T::Type{<:Real}, m::Event.EventMessage, len::Int) = reinterpret(T, Event.value!(m, sizeof(T) * len))
