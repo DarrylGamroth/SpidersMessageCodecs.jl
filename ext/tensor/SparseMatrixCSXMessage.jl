@@ -7,108 +7,109 @@ struct SparseMatrixCSXMessageDecoder{T<:AbstractArray{UInt8}} <: SparseMatrixCSX
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    acting_block_length::Int64
-    acting_version::Int64
+    acting_block_length::UInt16
+    acting_version::UInt16
+    function SparseMatrixCSXMessageDecoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64},
+        acting_block_length::UInt16, acting_version::UInt16) where {T}
+        position_ptr[] = offset + acting_block_length
+        new{T}(buffer, offset, position_ptr, acting_block_length, acting_version)
+    end
 end
 
 struct SparseMatrixCSXMessageEncoder{T<:AbstractArray{UInt8}} <: SparseMatrixCSXMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
+    function SparseMatrixCSXMessageEncoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64}) where {T}
+        position_ptr[] = offset + 84
+        new{T}(buffer, offset, position_ptr)
+    end
 end
 
-@inline function SparseMatrixCSXMessageDecoder(context::SbeCodecContext, buffer, offset,
-    acting_block_length, acting_version)
-    sbe_position!(context, offset + acting_block_length)
-    SparseMatrixCSXMessageDecoder(buffer, offset, sbe_position_ptr(context), acting_block_length, acting_version)
+function SparseMatrixCSXMessageDecoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+    hdr::MessageHeader)
+    if templateId(hdr) != UInt16(0x2) || schemaId(hdr) != UInt16(0x1)
+        error("Template id or schema id mismatch")
+    end
+    SparseMatrixCSXMessageDecoder(buffer, offset + sbe_encoded_length(hdr), position_ptr,
+        blockLength(hdr), version(hdr))
 end
-
-@inline function SparseMatrixCSXMessageDecoder(context::SbeCodecContext, buffer, offset, hdr::MessageHeader)
-    SparseMatrixCSXMessageDecoder(context, buffer, offset + sbe_encoded_length(hdr),
-        Int64(blockLength(hdr)), Int64(version(hdr)))
+function SparseMatrixCSXMessageDecoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64},
+    hdr::MessageHeader)
+    SparseMatrixCSXMessageDecoder(buffer, 0, position_ptr, hdr)
 end
-
-@inline function SparseMatrixCSXMessageDecoder(context::SbeCodecContext, buffer, hdr::MessageHeader)
-    SparseMatrixCSXMessageDecoder(context, buffer, 0, hdr)
+function SparseMatrixCSXMessageDecoder(buffer::AbstractArray, offset::Int,
+    acting_block_length::UInt16, acting_version::UInt16)
+    SparseMatrixCSXMessageDecoder(buffer, offset, Ref(0), acting_block_length, acting_version)
 end
-@inline function SparseMatrixCSXMessageDecoder(buffer, offset, acting_block_length, acting_version)
-    SparseMatrixCSXMessageDecoder(SbeCodecContext(), buffer, offset, acting_block_length, acting_version)
+function SparseMatrixCSXMessageDecoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+    SparseMatrixCSXMessageDecoder(buffer, offset, Ref(0), hdr)
 end
-
-@inline SparseMatrixCSXMessageDecoder(buffer, offset, hdr) = SparseMatrixCSXMessageDecoder(SbeCodecContext(), buffer, offset, hdr)
-@inline SparseMatrixCSXMessageDecoder(buffer, hdr) = SparseMatrixCSXMessageDecoder(SbeCodecContext(), buffer, 0, hdr)
- @inline function SparseMatrixCSXMessageEncoder(context::SbeCodecContext, buffer, offset=0)
-    sbe_position!(context, offset + 84)
-    SparseMatrixCSXMessageEncoder(buffer, offset, sbe_position_ptr(context))
+SparseMatrixCSXMessageDecoder(buffer::AbstractArray, hdr::MessageHeader) = SparseMatrixCSXMessageDecoder(buffer, 0, Ref(0), hdr)
+function SparseMatrixCSXMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64})
+    SparseMatrixCSXMessageEncoder(buffer, 0, position_ptr)
 end
-@inline SparseMatrixCSXMessageEncoder(buffer, offset=0) = SparseMatrixCSXMessageEncoder(SbeCodecContext(), buffer, offset)
-@inline SparseMatrixCSXMessage() = SparseMatrixCSXMessageEncoder(SbeCodecContext(), UInt8[])
-
-@inline function SparseMatrixCSXMessageEncoder(context::SbeCodecContext, buffer, offset, hdr::MessageHeader)
-    blockLength!(hdr, 84)
-    templateId!(hdr, 2)
-    schemaId!(hdr, 1)
-    version!(hdr, 0)
-    SparseMatrixCSXMessageEncoder(context, buffer, offset + sbe_encoded_length(hdr))
+function SparseMatrixCSXMessageEncoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+    hdr::MessageHeader)
+    blockLength!(hdr, UInt16(0x54))
+    templateId!(hdr, UInt16(0x2))
+    schemaId!(hdr, UInt16(0x1))
+    version!(hdr, UInt16(0x0))
+    SparseMatrixCSXMessageEncoder(buffer, offset + sbe_encoded_length(hdr), position_ptr)
 end
-
-@inline function SparseMatrixCSXMessageEncoder(context::SbeCodecContext, buffer, hdr::MessageHeader)
-    SparseMatrixCSXMessageEncoder(context, buffer, 0, hdr)
+function SparseMatrixCSXMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64}, hdr::MessageHeader)
+    SparseMatrixCSXMessageEncoder(buffer, 0, position_ptr, hdr)
 end
-
-@inline function SparseMatrixCSXMessageEncoder(buffer, offset, hdr::MessageHeader)
-    SparseMatrixCSXMessageEncoder(SbeCodecContext(), buffer, offset, hdr)
+function SparseMatrixCSXMessageEncoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+    SparseMatrixCSXMessageEncoder(buffer, offset, Ref(0), hdr)
 end
-
-@inline function SparseMatrixCSXMessageEncoder(buffer, hdr::MessageHeader)
-    SparseMatrixCSXMessageEncoder(SbeCodecContext(), buffer, 0, hdr)
+function SparseMatrixCSXMessageEncoder(buffer::AbstractArray, hdr::MessageHeader)
+    SparseMatrixCSXMessageEncoder(buffer, 0, Ref(0), hdr)
 end
-
+SparseMatrixCSXMessageEncoder(buffer::AbstractArray, offset::Int=0) = SparseMatrixCSXMessageEncoder(buffer, offset, Ref(0))
 sbe_buffer(m::SparseMatrixCSXMessage) = m.buffer
 sbe_offset(m::SparseMatrixCSXMessage) = m.offset
 sbe_position_ptr(m::SparseMatrixCSXMessage) = m.position_ptr
 sbe_position(m::SparseMatrixCSXMessage) = m.position_ptr[]
 @inline sbe_check_position(m::SparseMatrixCSXMessage, position) = (checkbounds(m.buffer, position + 1); position)
 @inline sbe_position!(m::SparseMatrixCSXMessage, position) = m.position_ptr[] = position
-sbe_block_length(::SparseMatrixCSXMessage) = 84
-sbe_template_id(::SparseMatrixCSXMessage) = 2
-sbe_schema_id(::SparseMatrixCSXMessage) = 1
-sbe_schema_version(::SparseMatrixCSXMessage) = 0
+sbe_block_length(::SparseMatrixCSXMessage) = UInt16(0x54)
+sbe_block_length(::Type{<:SparseMatrixCSXMessage}) = UInt16(0x54)
+sbe_template_id(::SparseMatrixCSXMessage) = UInt16(0x2)
+sbe_template_id(::Type{<:SparseMatrixCSXMessage})  = UInt16(0x2)
+sbe_schema_id(::SparseMatrixCSXMessage) = UInt16(0x1)
+sbe_schema_id(::Type{<:SparseMatrixCSXMessage})  = UInt16(0x1)
+sbe_schema_version(::SparseMatrixCSXMessage) = UInt16(0x0)
+sbe_schema_version(::Type{<:SparseMatrixCSXMessage})  = UInt16(0x0)
 sbe_semantic_type(::SparseMatrixCSXMessage) = ""
 sbe_semantic_version(::SparseMatrixCSXMessage) = ""
 sbe_encoded_length(m::SparseMatrixCSXMessageEncoder) = sbe_position(m) - m.offset
-sbe_rewind!(m::SparseMatrixCSXMessageEncoder) = sbe_position!(m, m.offset + 84)
+sbe_rewind!(m::SparseMatrixCSXMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x54))
 
 sbe_acting_block_length(m::SparseMatrixCSXMessageDecoder) = m.acting_block_length
 sbe_acting_version(m::SparseMatrixCSXMessageDecoder) = m.acting_version
 sbe_rewind!(m::SparseMatrixCSXMessageDecoder) = sbe_position!(m, m.offset + m.acting_block_length)
 
-@inline function sbe_decoded_length(m::SparseMatrixCSXMessageDecoder)
-    skipper = SparseMatrixCSXMessageEncoder(m.buffer, m.offset)
-    skip!(skipper)
-    return sbe_encoded_length(skipper)
+@inline function sbe_decoded_length(m::SparseMatrixCSXMessage)
+    sbe_rewind!(m)
+    skip!(m)
+    return sbe_position(m) - m.offset
 end
 
-function sbe_decoded_buffer(m::SparseMatrixCSXMessageDecoder)
-    offset = m.offset - sbe_encoded_length(MessageHeader())
+function sbe_message_buffer(m::SparseMatrixCSXMessage)
+    offset = m.offset - sbe_encoded_length(MessageHeader)
     offset < 0 && throw(ArgumentError("Message offset is negative"))
-    return view(m.buffer, offset+1:offset+sbe_decoded_length(m))
+    return view(m.buffer, offset+1:m.offset+sbe_decoded_length(m))
 end
 
-function sbe_encoded_buffer(m::SparseMatrixCSXMessageEncoder)
-    offset = m.offset - sbe_encoded_length(MessageHeader())
-    offset < 0 && throw(ArgumentError("Message offset is negative"))
-    d = SparseMatrixCSXMessageDecoder(m.buffer, MessageHeader(m.buffer, offset))
-    return view(d.buffer, offset+1:offset+sbe_decoded_length(d))
-end
 
 function header_meta_attribute(::SparseMatrixCSXMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-header_id(::SparseMatrixCSXMessage) = 1
-header_since_version(::SparseMatrixCSXMessage) = 0
-header_in_acting_version(m::SparseMatrixCSXMessage) = sbe_acting_version(m) >= 0
+header_id(::SparseMatrixCSXMessage) = UInt16(0x1)
+header_since_version(::SparseMatrixCSXMessage) = UInt16(0x0)
+header_in_acting_version(m::SparseMatrixCSXMessage) = sbe_acting_version(m) >= UInt16(0x0)
 header_encoding_offset(::SparseMatrixCSXMessage) = 0
 header(m::SparseMatrixCSXMessage) = SpidersMessageHeader(m.buffer, m.offset + 0)
 
@@ -116,9 +117,9 @@ function format_meta_attribute(::SparseMatrixCSXMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-format_id(::SparseMatrixCSXMessage) = 2
-format_since_version(::SparseMatrixCSXMessage) = 0
-format_in_acting_version(m::SparseMatrixCSXMessage) = sbe_acting_version(m) >= 0
+format_id(::SparseMatrixCSXMessage) = UInt16(0x2)
+format_since_version(::SparseMatrixCSXMessage) = UInt16(0x0)
+format_in_acting_version(m::SparseMatrixCSXMessage) = sbe_acting_version(m) >= UInt16(0x0)
 format_encoding_offset(::SparseMatrixCSXMessage) = 64
 format_encoding_length(::SparseMatrixCSXMessage) = 1
 @inline function format(::Type{Integer}, m::SparseMatrixCSXMessageDecoder)
@@ -133,9 +134,9 @@ function order_meta_attribute(::SparseMatrixCSXMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-order_id(::SparseMatrixCSXMessage) = 3
-order_since_version(::SparseMatrixCSXMessage) = 0
-order_in_acting_version(m::SparseMatrixCSXMessage) = sbe_acting_version(m) >= 0
+order_id(::SparseMatrixCSXMessage) = UInt16(0x3)
+order_since_version(::SparseMatrixCSXMessage) = UInt16(0x0)
+order_in_acting_version(m::SparseMatrixCSXMessage) = sbe_acting_version(m) >= UInt16(0x0)
 order_encoding_offset(::SparseMatrixCSXMessage) = 65
 order_encoding_length(::SparseMatrixCSXMessage) = 1
 @inline function order(::Type{Integer}, m::SparseMatrixCSXMessageDecoder)
@@ -150,9 +151,9 @@ function indexing_meta_attribute(::SparseMatrixCSXMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-indexing_id(::SparseMatrixCSXMessage) = 4
-indexing_since_version(::SparseMatrixCSXMessage) = 0
-indexing_in_acting_version(m::SparseMatrixCSXMessage) = sbe_acting_version(m) >= 0
+indexing_id(::SparseMatrixCSXMessage) = UInt16(0x4)
+indexing_since_version(::SparseMatrixCSXMessage) = UInt16(0x0)
+indexing_in_acting_version(m::SparseMatrixCSXMessage) = sbe_acting_version(m) >= UInt16(0x0)
 indexing_encoding_offset(::SparseMatrixCSXMessage) = 66
 indexing_encoding_length(::SparseMatrixCSXMessage) = 1
 @inline function indexing(::Type{Integer}, m::SparseMatrixCSXMessageDecoder)
@@ -167,9 +168,9 @@ function reserved1_meta_attribute(::SparseMatrixCSXMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-reserved1_id(::SparseMatrixCSXMessage) = 5
-reserved1_since_version(::SparseMatrixCSXMessage) = 0
-reserved1_in_acting_version(m::SparseMatrixCSXMessage) = sbe_acting_version(m) >= 0
+reserved1_id(::SparseMatrixCSXMessage) = UInt16(0x5)
+reserved1_since_version(::SparseMatrixCSXMessage) = UInt16(0x0)
+reserved1_in_acting_version(m::SparseMatrixCSXMessage) = sbe_acting_version(m) >= UInt16(0x0)
 reserved1_encoding_offset(::SparseMatrixCSXMessage) = 67
 reserved1_null_value(::SparseMatrixCSXMessage) = Int8(-128)
 reserved1_min_value(::SparseMatrixCSXMessage) = Int8(-127)
@@ -181,34 +182,34 @@ reserved1_encoding_length(::SparseMatrixCSXMessage) = 1
 end
 @inline reserved1!(m::SparseMatrixCSXMessageEncoder, value) = encode_le(Int8, m.buffer, m.offset + 67, value)
 
-function shape_meta_attribute(::SparseMatrixCSXMessage, meta_attribute)
+function dims_meta_attribute(::SparseMatrixCSXMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-shape_id(::SparseMatrixCSXMessage) = 6
-shape_since_version(::SparseMatrixCSXMessage) = 0
-shape_in_acting_version(m::SparseMatrixCSXMessage) = sbe_acting_version(m) >= 0
-shape_encoding_offset(::SparseMatrixCSXMessage) = 68
-shape_null_value(::SparseMatrixCSXMessage) = Int64(-9223372036854775808)
-shape_min_value(::SparseMatrixCSXMessage) = Int64(-9223372036854775807)
-shape_max_value(::SparseMatrixCSXMessage) = Int64(9223372036854775807)
-shape_encoding_length(::SparseMatrixCSXMessage) = 16
-shape_length(::SparseMatrixCSXMessage) = 2
-shape_eltype(::SparseMatrixCSXMessage) = Int64
+dims_id(::SparseMatrixCSXMessage) = UInt16(0x6)
+dims_since_version(::SparseMatrixCSXMessage) = UInt16(0x0)
+dims_in_acting_version(m::SparseMatrixCSXMessage) = sbe_acting_version(m) >= UInt16(0x0)
+dims_encoding_offset(::SparseMatrixCSXMessage) = 68
+dims_null_value(::SparseMatrixCSXMessage) = Int64(-9223372036854775808)
+dims_min_value(::SparseMatrixCSXMessage) = Int64(-9223372036854775807)
+dims_max_value(::SparseMatrixCSXMessage) = Int64(9223372036854775807)
+dims_encoding_length(::SparseMatrixCSXMessage) = 16
+dims_length(::SparseMatrixCSXMessage) = 2
+dims_eltype(::SparseMatrixCSXMessage) = Int64
 
-@inline function shape(m::SparseMatrixCSXMessageDecoder)
+@inline function dims(m::SparseMatrixCSXMessageDecoder)
     return mappedarray(ltoh, reinterpret(Int64, view(m.buffer, m.offset+68+1:m.offset+68+sizeof(Int64)*2)))
 end
 
-@inline function shape(::Type{<:SVector},m::SparseMatrixCSXMessageDecoder)
+@inline function dims(::Type{<:SVector},m::SparseMatrixCSXMessageDecoder)
     return mappedarray(ltoh, reinterpret(SVector{2,Int64}, view(m.buffer, m.offset+68+1:m.offset+68+sizeof(Int64)*2))[])
 end
 
-@inline function shape!(m::SparseMatrixCSXMessageEncoder)
+@inline function dims!(m::SparseMatrixCSXMessageEncoder)
     return mappedarray(ltoh, htol, reinterpret(Int64, view(m.buffer, m.offset+68+1:m.offset+68+sizeof(Int64)*2)))
 end
 
-@inline function shape!(m::SparseMatrixCSXMessageEncoder, value)
+@inline function dims!(m::SparseMatrixCSXMessageEncoder, value)
     copyto!(mappedarray(ltoh, htol, reinterpret(Int64, view(m.buffer, m.offset+68+1:m.offset+68+sizeof(Int64)*2))), value)
 end
 
@@ -395,8 +396,8 @@ function Base.show(io::IO, m::SparseMatrixCSXMessage{T}) where {T}
     print(io, reserved1(writer))
 
     println(io)
-    print(io, "shape: ")
-    print(io, shape(writer))
+    print(io, "dims: ")
+    print(io, dims(writer))
 
     println(io)
     print(io, "indexPointer: ")

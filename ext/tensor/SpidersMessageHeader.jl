@@ -4,7 +4,7 @@
 struct SpidersMessageHeader{T<:AbstractArray{UInt8}}
     buffer::T
     offset::Int64
-    acting_version::Int64
+    acting_version::UInt16
     function SpidersMessageHeader(buffer::T, offset=0, acting_version=0) where {T}
         new{T}(buffer, offset, acting_version)
     end
@@ -12,23 +12,24 @@ end
 const SpidersMessageHeaderDecoder = SpidersMessageHeader
 const SpidersMessageHeaderEncoder = SpidersMessageHeader
 
-SpidersMessageHeader() = SpidersMessageHeader(UInt8[])
-
 sbe_buffer(m::SpidersMessageHeader) = m.buffer
 sbe_offset(m::SpidersMessageHeader) = m.offset
-sbe_decoded_buffer(m::SpidersMessageHeader) = view(m.buffer, m.offset+1:m.offset+64)
+sbe_message_buffer(m::SpidersMessageHeader) = view(m.buffer, m.offset+1:m.offset+64)
 sbe_acting_version(m::SpidersMessageHeader) = m.acting_version
-sbe_encoded_length(::SpidersMessageHeader) = 64
-sbe_schema_id(::SpidersMessageHeader) = 1
-sbe_schema_version(::SpidersMessageHeader) = 0
+sbe_encoded_length(::SpidersMessageHeader) = UInt16(0x40)
+sbe_encoded_length(::Type{<:SpidersMessageHeader}) = UInt16(0x40)
+sbe_schema_id(::SpidersMessageHeader) = UInt16(0x1)
+sbe_schema_id(::Type{<:SpidersMessageHeader}) = UInt16(0x1)
+sbe_schema_version(::SpidersMessageHeader) = UInt16(0x0)
+sbe_schema_version(::Type{<:SpidersMessageHeader}) = UInt16(0x0)
 
 function channelRcvTimestampNs_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-channelRcvTimestampNs_id(::SpidersMessageHeader) = -1
-channelRcvTimestampNs_since_version(::SpidersMessageHeader) = 0
-channelRcvTimestampNs_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= 0
+channelRcvTimestampNs_id(::SpidersMessageHeader) = UInt16(0xffffffffffffffff)
+channelRcvTimestampNs_since_version(::SpidersMessageHeader) = UInt16(0x0)
+channelRcvTimestampNs_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= UInt16(0x0)
 channelRcvTimestampNs_encoding_offset(::SpidersMessageHeader) = 0
 channelRcvTimestampNs_null_value(::SpidersMessageHeader) = Int64(-9223372036854775808)
 channelRcvTimestampNs_min_value(::SpidersMessageHeader) = Int64(-9223372036854775807)
@@ -44,9 +45,9 @@ function channelSndTimestampNs_meta_attribute(::SpidersMessageHeader, meta_attri
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-channelSndTimestampNs_id(::SpidersMessageHeader) = -1
-channelSndTimestampNs_since_version(::SpidersMessageHeader) = 0
-channelSndTimestampNs_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= 0
+channelSndTimestampNs_id(::SpidersMessageHeader) = UInt16(0xffffffffffffffff)
+channelSndTimestampNs_since_version(::SpidersMessageHeader) = UInt16(0x0)
+channelSndTimestampNs_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= UInt16(0x0)
 channelSndTimestampNs_encoding_offset(::SpidersMessageHeader) = 8
 channelSndTimestampNs_null_value(::SpidersMessageHeader) = Int64(-9223372036854775808)
 channelSndTimestampNs_min_value(::SpidersMessageHeader) = Int64(-9223372036854775807)
@@ -62,9 +63,9 @@ function timestampNs_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-timestampNs_id(::SpidersMessageHeader) = -1
-timestampNs_since_version(::SpidersMessageHeader) = 0
-timestampNs_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= 0
+timestampNs_id(::SpidersMessageHeader) = UInt16(0xffffffffffffffff)
+timestampNs_since_version(::SpidersMessageHeader) = UInt16(0x0)
+timestampNs_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= UInt16(0x0)
 timestampNs_encoding_offset(::SpidersMessageHeader) = 16
 timestampNs_null_value(::SpidersMessageHeader) = Int64(-9223372036854775808)
 timestampNs_min_value(::SpidersMessageHeader) = Int64(-9223372036854775807)
@@ -80,9 +81,9 @@ function correlationId_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-correlationId_id(::SpidersMessageHeader) = -1
-correlationId_since_version(::SpidersMessageHeader) = 0
-correlationId_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= 0
+correlationId_id(::SpidersMessageHeader) = UInt16(0xffffffffffffffff)
+correlationId_since_version(::SpidersMessageHeader) = UInt16(0x0)
+correlationId_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= UInt16(0x0)
 correlationId_encoding_offset(::SpidersMessageHeader) = 24
 correlationId_null_value(::SpidersMessageHeader) = Int64(-9223372036854775808)
 correlationId_min_value(::SpidersMessageHeader) = Int64(-9223372036854775807)
@@ -98,9 +99,9 @@ function tag_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-tag_id(::SpidersMessageHeader) = -1
-tag_since_version(::SpidersMessageHeader) = 0
-tag_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= 0
+tag_id(::SpidersMessageHeader) = UInt16(0xffffffffffffffff)
+tag_since_version(::SpidersMessageHeader) = UInt16(0x0)
+tag_in_acting_version(m::SpidersMessageHeader) = sbe_acting_version(m) >= UInt16(0x0)
 tag_encoding_offset(::SpidersMessageHeader) = 32
 tag_null_value(::SpidersMessageHeader) = UInt8(0x0)
 tag_min_value(::SpidersMessageHeader) = UInt8(0x20)

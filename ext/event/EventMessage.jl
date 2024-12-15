@@ -7,108 +7,109 @@ struct EventMessageDecoder{T<:AbstractArray{UInt8}} <: EventMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    acting_block_length::Int64
-    acting_version::Int64
+    acting_block_length::UInt16
+    acting_version::UInt16
+    function EventMessageDecoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64},
+        acting_block_length::UInt16, acting_version::UInt16) where {T}
+        position_ptr[] = offset + acting_block_length
+        new{T}(buffer, offset, position_ptr, acting_block_length, acting_version)
+    end
 end
 
 struct EventMessageEncoder{T<:AbstractArray{UInt8}} <: EventMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
+    function EventMessageEncoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64}) where {T}
+        position_ptr[] = offset + 100
+        new{T}(buffer, offset, position_ptr)
+    end
 end
 
-@inline function EventMessageDecoder(context::SbeCodecContext, buffer, offset,
-    acting_block_length, acting_version)
-    sbe_position!(context, offset + acting_block_length)
-    EventMessageDecoder(buffer, offset, sbe_position_ptr(context), acting_block_length, acting_version)
+function EventMessageDecoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+    hdr::MessageHeader)
+    if templateId(hdr) != UInt16(0x1) || schemaId(hdr) != UInt16(0x6)
+        error("Template id or schema id mismatch")
+    end
+    EventMessageDecoder(buffer, offset + sbe_encoded_length(hdr), position_ptr,
+        blockLength(hdr), version(hdr))
 end
-
-@inline function EventMessageDecoder(context::SbeCodecContext, buffer, offset, hdr::MessageHeader)
-    EventMessageDecoder(context, buffer, offset + sbe_encoded_length(hdr),
-        Int64(blockLength(hdr)), Int64(version(hdr)))
+function EventMessageDecoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64},
+    hdr::MessageHeader)
+    EventMessageDecoder(buffer, 0, position_ptr, hdr)
 end
-
-@inline function EventMessageDecoder(context::SbeCodecContext, buffer, hdr::MessageHeader)
-    EventMessageDecoder(context, buffer, 0, hdr)
+function EventMessageDecoder(buffer::AbstractArray, offset::Int,
+    acting_block_length::UInt16, acting_version::UInt16)
+    EventMessageDecoder(buffer, offset, Ref(0), acting_block_length, acting_version)
 end
-@inline function EventMessageDecoder(buffer, offset, acting_block_length, acting_version)
-    EventMessageDecoder(SbeCodecContext(), buffer, offset, acting_block_length, acting_version)
+function EventMessageDecoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+    EventMessageDecoder(buffer, offset, Ref(0), hdr)
 end
-
-@inline EventMessageDecoder(buffer, offset, hdr) = EventMessageDecoder(SbeCodecContext(), buffer, offset, hdr)
-@inline EventMessageDecoder(buffer, hdr) = EventMessageDecoder(SbeCodecContext(), buffer, 0, hdr)
- @inline function EventMessageEncoder(context::SbeCodecContext, buffer, offset=0)
-    sbe_position!(context, offset + 100)
-    EventMessageEncoder(buffer, offset, sbe_position_ptr(context))
+EventMessageDecoder(buffer::AbstractArray, hdr::MessageHeader) = EventMessageDecoder(buffer, 0, Ref(0), hdr)
+function EventMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64})
+    EventMessageEncoder(buffer, 0, position_ptr)
 end
-@inline EventMessageEncoder(buffer, offset=0) = EventMessageEncoder(SbeCodecContext(), buffer, offset)
-@inline EventMessage() = EventMessageEncoder(SbeCodecContext(), UInt8[])
-
-@inline function EventMessageEncoder(context::SbeCodecContext, buffer, offset, hdr::MessageHeader)
-    blockLength!(hdr, 100)
-    templateId!(hdr, 1)
-    schemaId!(hdr, 6)
-    version!(hdr, 0)
-    EventMessageEncoder(context, buffer, offset + sbe_encoded_length(hdr))
+function EventMessageEncoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+    hdr::MessageHeader)
+    blockLength!(hdr, UInt16(0x64))
+    templateId!(hdr, UInt16(0x1))
+    schemaId!(hdr, UInt16(0x6))
+    version!(hdr, UInt16(0x0))
+    EventMessageEncoder(buffer, offset + sbe_encoded_length(hdr), position_ptr)
 end
-
-@inline function EventMessageEncoder(context::SbeCodecContext, buffer, hdr::MessageHeader)
-    EventMessageEncoder(context, buffer, 0, hdr)
+function EventMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64}, hdr::MessageHeader)
+    EventMessageEncoder(buffer, 0, position_ptr, hdr)
 end
-
-@inline function EventMessageEncoder(buffer, offset, hdr::MessageHeader)
-    EventMessageEncoder(SbeCodecContext(), buffer, offset, hdr)
+function EventMessageEncoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+    EventMessageEncoder(buffer, offset, Ref(0), hdr)
 end
-
-@inline function EventMessageEncoder(buffer, hdr::MessageHeader)
-    EventMessageEncoder(SbeCodecContext(), buffer, 0, hdr)
+function EventMessageEncoder(buffer::AbstractArray, hdr::MessageHeader)
+    EventMessageEncoder(buffer, 0, Ref(0), hdr)
 end
-
+EventMessageEncoder(buffer::AbstractArray, offset::Int=0) = EventMessageEncoder(buffer, offset, Ref(0))
 sbe_buffer(m::EventMessage) = m.buffer
 sbe_offset(m::EventMessage) = m.offset
 sbe_position_ptr(m::EventMessage) = m.position_ptr
 sbe_position(m::EventMessage) = m.position_ptr[]
 @inline sbe_check_position(m::EventMessage, position) = (checkbounds(m.buffer, position + 1); position)
 @inline sbe_position!(m::EventMessage, position) = m.position_ptr[] = position
-sbe_block_length(::EventMessage) = 100
-sbe_template_id(::EventMessage) = 1
-sbe_schema_id(::EventMessage) = 6
-sbe_schema_version(::EventMessage) = 0
+sbe_block_length(::EventMessage) = UInt16(0x64)
+sbe_block_length(::Type{<:EventMessage}) = UInt16(0x64)
+sbe_template_id(::EventMessage) = UInt16(0x1)
+sbe_template_id(::Type{<:EventMessage})  = UInt16(0x1)
+sbe_schema_id(::EventMessage) = UInt16(0x6)
+sbe_schema_id(::Type{<:EventMessage})  = UInt16(0x6)
+sbe_schema_version(::EventMessage) = UInt16(0x0)
+sbe_schema_version(::Type{<:EventMessage})  = UInt16(0x0)
 sbe_semantic_type(::EventMessage) = ""
 sbe_semantic_version(::EventMessage) = ""
 sbe_encoded_length(m::EventMessageEncoder) = sbe_position(m) - m.offset
-sbe_rewind!(m::EventMessageEncoder) = sbe_position!(m, m.offset + 100)
+sbe_rewind!(m::EventMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x64))
 
 sbe_acting_block_length(m::EventMessageDecoder) = m.acting_block_length
 sbe_acting_version(m::EventMessageDecoder) = m.acting_version
 sbe_rewind!(m::EventMessageDecoder) = sbe_position!(m, m.offset + m.acting_block_length)
 
-@inline function sbe_decoded_length(m::EventMessageDecoder)
-    skipper = EventMessageEncoder(m.buffer, m.offset)
-    skip!(skipper)
-    return sbe_encoded_length(skipper)
+@inline function sbe_decoded_length(m::EventMessage)
+    sbe_rewind!(m)
+    skip!(m)
+    return sbe_position(m) - m.offset
 end
 
-function sbe_decoded_buffer(m::EventMessageDecoder)
-    offset = m.offset - sbe_encoded_length(MessageHeader())
+function sbe_message_buffer(m::EventMessage)
+    offset = m.offset - sbe_encoded_length(MessageHeader)
     offset < 0 && throw(ArgumentError("Message offset is negative"))
-    return view(m.buffer, offset+1:offset+sbe_decoded_length(m))
+    return view(m.buffer, offset+1:m.offset+sbe_decoded_length(m))
 end
 
-function sbe_encoded_buffer(m::EventMessageEncoder)
-    offset = m.offset - sbe_encoded_length(MessageHeader())
-    offset < 0 && throw(ArgumentError("Message offset is negative"))
-    d = EventMessageDecoder(m.buffer, MessageHeader(m.buffer, offset))
-    return view(d.buffer, offset+1:offset+sbe_decoded_length(d))
-end
 
 function header_meta_attribute(::EventMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-header_id(::EventMessage) = 1
-header_since_version(::EventMessage) = 0
-header_in_acting_version(m::EventMessage) = sbe_acting_version(m) >= 0
+header_id(::EventMessage) = UInt16(0x1)
+header_since_version(::EventMessage) = UInt16(0x0)
+header_in_acting_version(m::EventMessage) = sbe_acting_version(m) >= UInt16(0x0)
 header_encoding_offset(::EventMessage) = 0
 header(m::EventMessage) = SpidersMessageHeader(m.buffer, m.offset + 0)
 
@@ -116,9 +117,9 @@ function format_meta_attribute(::EventMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-format_id(::EventMessage) = 2
-format_since_version(::EventMessage) = 0
-format_in_acting_version(m::EventMessage) = sbe_acting_version(m) >= 0
+format_id(::EventMessage) = UInt16(0x2)
+format_since_version(::EventMessage) = UInt16(0x0)
+format_in_acting_version(m::EventMessage) = sbe_acting_version(m) >= UInt16(0x0)
 format_encoding_offset(::EventMessage) = 64
 format_encoding_length(::EventMessage) = 1
 @inline function format(::Type{Integer}, m::EventMessageDecoder)
@@ -133,9 +134,9 @@ function reserved1_meta_attribute(::EventMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-reserved1_id(::EventMessage) = 9
-reserved1_since_version(::EventMessage) = 0
-reserved1_in_acting_version(m::EventMessage) = sbe_acting_version(m) >= 0
+reserved1_id(::EventMessage) = UInt16(0x9)
+reserved1_since_version(::EventMessage) = UInt16(0x0)
+reserved1_in_acting_version(m::EventMessage) = sbe_acting_version(m) >= UInt16(0x0)
 reserved1_encoding_offset(::EventMessage) = 65
 reserved1_null_value(::EventMessage) = Int8(-128)
 reserved1_min_value(::EventMessage) = Int8(-127)
@@ -164,9 +165,9 @@ function key_meta_attribute(::EventMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-key_id(::EventMessage) = 10
-key_since_version(::EventMessage) = 0
-key_in_acting_version(m::EventMessage) = sbe_acting_version(m) >= 0
+key_id(::EventMessage) = UInt16(0xa)
+key_since_version(::EventMessage) = UInt16(0x0)
+key_in_acting_version(m::EventMessage) = sbe_acting_version(m) >= UInt16(0x0)
 key_encoding_offset(::EventMessage) = 68
 key_null_value(::EventMessage) = UInt8(0x0)
 key_min_value(::EventMessage) = UInt8(0x20)

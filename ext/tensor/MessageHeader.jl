@@ -4,7 +4,7 @@
 struct MessageHeader{T<:AbstractArray{UInt8}}
     buffer::T
     offset::Int64
-    acting_version::Int64
+    acting_version::UInt16
     function MessageHeader(buffer::T, offset=0, acting_version=0) where {T}
         new{T}(buffer, offset, acting_version)
     end
@@ -12,23 +12,24 @@ end
 const MessageHeaderDecoder = MessageHeader
 const MessageHeaderEncoder = MessageHeader
 
-MessageHeader() = MessageHeader(UInt8[])
-
 sbe_buffer(m::MessageHeader) = m.buffer
 sbe_offset(m::MessageHeader) = m.offset
-sbe_decoded_buffer(m::MessageHeader) = view(m.buffer, m.offset+1:m.offset+8)
+sbe_message_buffer(m::MessageHeader) = view(m.buffer, m.offset+1:m.offset+8)
 sbe_acting_version(m::MessageHeader) = m.acting_version
-sbe_encoded_length(::MessageHeader) = 8
-sbe_schema_id(::MessageHeader) = 1
-sbe_schema_version(::MessageHeader) = 0
+sbe_encoded_length(::MessageHeader) = UInt16(0x8)
+sbe_encoded_length(::Type{<:MessageHeader}) = UInt16(0x8)
+sbe_schema_id(::MessageHeader) = UInt16(0x1)
+sbe_schema_id(::Type{<:MessageHeader}) = UInt16(0x1)
+sbe_schema_version(::MessageHeader) = UInt16(0x0)
+sbe_schema_version(::Type{<:MessageHeader}) = UInt16(0x0)
 
 function blockLength_meta_attribute(::MessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-blockLength_id(::MessageHeader) = -1
-blockLength_since_version(::MessageHeader) = 0
-blockLength_in_acting_version(m::MessageHeader) = sbe_acting_version(m) >= 0
+blockLength_id(::MessageHeader) = UInt16(0xffffffffffffffff)
+blockLength_since_version(::MessageHeader) = UInt16(0x0)
+blockLength_in_acting_version(m::MessageHeader) = sbe_acting_version(m) >= UInt16(0x0)
 blockLength_encoding_offset(::MessageHeader) = 0
 blockLength_null_value(::MessageHeader) = UInt16(0xffff)
 blockLength_min_value(::MessageHeader) = UInt16(0x0)
@@ -44,9 +45,9 @@ function templateId_meta_attribute(::MessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-templateId_id(::MessageHeader) = -1
-templateId_since_version(::MessageHeader) = 0
-templateId_in_acting_version(m::MessageHeader) = sbe_acting_version(m) >= 0
+templateId_id(::MessageHeader) = UInt16(0xffffffffffffffff)
+templateId_since_version(::MessageHeader) = UInt16(0x0)
+templateId_in_acting_version(m::MessageHeader) = sbe_acting_version(m) >= UInt16(0x0)
 templateId_encoding_offset(::MessageHeader) = 2
 templateId_null_value(::MessageHeader) = UInt16(0xffff)
 templateId_min_value(::MessageHeader) = UInt16(0x0)
@@ -62,9 +63,9 @@ function schemaId_meta_attribute(::MessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-schemaId_id(::MessageHeader) = -1
-schemaId_since_version(::MessageHeader) = 0
-schemaId_in_acting_version(m::MessageHeader) = sbe_acting_version(m) >= 0
+schemaId_id(::MessageHeader) = UInt16(0xffffffffffffffff)
+schemaId_since_version(::MessageHeader) = UInt16(0x0)
+schemaId_in_acting_version(m::MessageHeader) = sbe_acting_version(m) >= UInt16(0x0)
 schemaId_encoding_offset(::MessageHeader) = 4
 schemaId_null_value(::MessageHeader) = UInt16(0xffff)
 schemaId_min_value(::MessageHeader) = UInt16(0x0)
@@ -80,9 +81,9 @@ function version_meta_attribute(::MessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-version_id(::MessageHeader) = -1
-version_since_version(::MessageHeader) = 0
-version_in_acting_version(m::MessageHeader) = sbe_acting_version(m) >= 0
+version_id(::MessageHeader) = UInt16(0xffffffffffffffff)
+version_since_version(::MessageHeader) = UInt16(0x0)
+version_in_acting_version(m::MessageHeader) = sbe_acting_version(m) >= UInt16(0x0)
 version_encoding_offset(::MessageHeader) = 6
 version_null_value(::MessageHeader) = UInt16(0xffff)
 version_min_value(::MessageHeader) = UInt16(0x0)

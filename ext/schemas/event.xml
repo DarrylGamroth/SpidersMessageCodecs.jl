@@ -25,8 +25,7 @@
             <validValue name="BOOLEAN">11</validValue>
             <validValue name="STRING">12</validValue>
             <validValue name="BYTES">13</validValue>
-            <validValue name="SYMBOL">14</validValue>
-            <validValue name="SBE">15</validValue>
+            <validValue name="SBE">14</validValue>
         </enum>
         <type name="Key" primitiveType="char" length="32"
             description="Key field to identify message" />

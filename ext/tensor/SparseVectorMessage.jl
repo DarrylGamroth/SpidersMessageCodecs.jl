@@ -7,108 +7,109 @@ struct SparseVectorMessageDecoder{T<:AbstractArray{UInt8}} <: SparseVectorMessag
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    acting_block_length::Int64
-    acting_version::Int64
+    acting_block_length::UInt16
+    acting_version::UInt16
+    function SparseVectorMessageDecoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64},
+        acting_block_length::UInt16, acting_version::UInt16) where {T}
+        position_ptr[] = offset + acting_block_length
+        new{T}(buffer, offset, position_ptr, acting_block_length, acting_version)
+    end
 end
 
 struct SparseVectorMessageEncoder{T<:AbstractArray{UInt8}} <: SparseVectorMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
+    function SparseVectorMessageEncoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64}) where {T}
+        position_ptr[] = offset + 76
+        new{T}(buffer, offset, position_ptr)
+    end
 end
 
-@inline function SparseVectorMessageDecoder(context::SbeCodecContext, buffer, offset,
-    acting_block_length, acting_version)
-    sbe_position!(context, offset + acting_block_length)
-    SparseVectorMessageDecoder(buffer, offset, sbe_position_ptr(context), acting_block_length, acting_version)
+function SparseVectorMessageDecoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+    hdr::MessageHeader)
+    if templateId(hdr) != UInt16(0x3) || schemaId(hdr) != UInt16(0x1)
+        error("Template id or schema id mismatch")
+    end
+    SparseVectorMessageDecoder(buffer, offset + sbe_encoded_length(hdr), position_ptr,
+        blockLength(hdr), version(hdr))
 end
-
-@inline function SparseVectorMessageDecoder(context::SbeCodecContext, buffer, offset, hdr::MessageHeader)
-    SparseVectorMessageDecoder(context, buffer, offset + sbe_encoded_length(hdr),
-        Int64(blockLength(hdr)), Int64(version(hdr)))
+function SparseVectorMessageDecoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64},
+    hdr::MessageHeader)
+    SparseVectorMessageDecoder(buffer, 0, position_ptr, hdr)
 end
-
-@inline function SparseVectorMessageDecoder(context::SbeCodecContext, buffer, hdr::MessageHeader)
-    SparseVectorMessageDecoder(context, buffer, 0, hdr)
+function SparseVectorMessageDecoder(buffer::AbstractArray, offset::Int,
+    acting_block_length::UInt16, acting_version::UInt16)
+    SparseVectorMessageDecoder(buffer, offset, Ref(0), acting_block_length, acting_version)
 end
-@inline function SparseVectorMessageDecoder(buffer, offset, acting_block_length, acting_version)
-    SparseVectorMessageDecoder(SbeCodecContext(), buffer, offset, acting_block_length, acting_version)
+function SparseVectorMessageDecoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+    SparseVectorMessageDecoder(buffer, offset, Ref(0), hdr)
 end
-
-@inline SparseVectorMessageDecoder(buffer, offset, hdr) = SparseVectorMessageDecoder(SbeCodecContext(), buffer, offset, hdr)
-@inline SparseVectorMessageDecoder(buffer, hdr) = SparseVectorMessageDecoder(SbeCodecContext(), buffer, 0, hdr)
- @inline function SparseVectorMessageEncoder(context::SbeCodecContext, buffer, offset=0)
-    sbe_position!(context, offset + 76)
-    SparseVectorMessageEncoder(buffer, offset, sbe_position_ptr(context))
+SparseVectorMessageDecoder(buffer::AbstractArray, hdr::MessageHeader) = SparseVectorMessageDecoder(buffer, 0, Ref(0), hdr)
+function SparseVectorMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64})
+    SparseVectorMessageEncoder(buffer, 0, position_ptr)
 end
-@inline SparseVectorMessageEncoder(buffer, offset=0) = SparseVectorMessageEncoder(SbeCodecContext(), buffer, offset)
-@inline SparseVectorMessage() = SparseVectorMessageEncoder(SbeCodecContext(), UInt8[])
-
-@inline function SparseVectorMessageEncoder(context::SbeCodecContext, buffer, offset, hdr::MessageHeader)
-    blockLength!(hdr, 76)
-    templateId!(hdr, 3)
-    schemaId!(hdr, 1)
-    version!(hdr, 0)
-    SparseVectorMessageEncoder(context, buffer, offset + sbe_encoded_length(hdr))
+function SparseVectorMessageEncoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+    hdr::MessageHeader)
+    blockLength!(hdr, UInt16(0x4c))
+    templateId!(hdr, UInt16(0x3))
+    schemaId!(hdr, UInt16(0x1))
+    version!(hdr, UInt16(0x0))
+    SparseVectorMessageEncoder(buffer, offset + sbe_encoded_length(hdr), position_ptr)
 end
-
-@inline function SparseVectorMessageEncoder(context::SbeCodecContext, buffer, hdr::MessageHeader)
-    SparseVectorMessageEncoder(context, buffer, 0, hdr)
+function SparseVectorMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64}, hdr::MessageHeader)
+    SparseVectorMessageEncoder(buffer, 0, position_ptr, hdr)
 end
-
-@inline function SparseVectorMessageEncoder(buffer, offset, hdr::MessageHeader)
-    SparseVectorMessageEncoder(SbeCodecContext(), buffer, offset, hdr)
+function SparseVectorMessageEncoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+    SparseVectorMessageEncoder(buffer, offset, Ref(0), hdr)
 end
-
-@inline function SparseVectorMessageEncoder(buffer, hdr::MessageHeader)
-    SparseVectorMessageEncoder(SbeCodecContext(), buffer, 0, hdr)
+function SparseVectorMessageEncoder(buffer::AbstractArray, hdr::MessageHeader)
+    SparseVectorMessageEncoder(buffer, 0, Ref(0), hdr)
 end
-
+SparseVectorMessageEncoder(buffer::AbstractArray, offset::Int=0) = SparseVectorMessageEncoder(buffer, offset, Ref(0))
 sbe_buffer(m::SparseVectorMessage) = m.buffer
 sbe_offset(m::SparseVectorMessage) = m.offset
 sbe_position_ptr(m::SparseVectorMessage) = m.position_ptr
 sbe_position(m::SparseVectorMessage) = m.position_ptr[]
 @inline sbe_check_position(m::SparseVectorMessage, position) = (checkbounds(m.buffer, position + 1); position)
 @inline sbe_position!(m::SparseVectorMessage, position) = m.position_ptr[] = position
-sbe_block_length(::SparseVectorMessage) = 76
-sbe_template_id(::SparseVectorMessage) = 3
-sbe_schema_id(::SparseVectorMessage) = 1
-sbe_schema_version(::SparseVectorMessage) = 0
+sbe_block_length(::SparseVectorMessage) = UInt16(0x4c)
+sbe_block_length(::Type{<:SparseVectorMessage}) = UInt16(0x4c)
+sbe_template_id(::SparseVectorMessage) = UInt16(0x3)
+sbe_template_id(::Type{<:SparseVectorMessage})  = UInt16(0x3)
+sbe_schema_id(::SparseVectorMessage) = UInt16(0x1)
+sbe_schema_id(::Type{<:SparseVectorMessage})  = UInt16(0x1)
+sbe_schema_version(::SparseVectorMessage) = UInt16(0x0)
+sbe_schema_version(::Type{<:SparseVectorMessage})  = UInt16(0x0)
 sbe_semantic_type(::SparseVectorMessage) = ""
 sbe_semantic_version(::SparseVectorMessage) = ""
 sbe_encoded_length(m::SparseVectorMessageEncoder) = sbe_position(m) - m.offset
-sbe_rewind!(m::SparseVectorMessageEncoder) = sbe_position!(m, m.offset + 76)
+sbe_rewind!(m::SparseVectorMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x4c))
 
 sbe_acting_block_length(m::SparseVectorMessageDecoder) = m.acting_block_length
 sbe_acting_version(m::SparseVectorMessageDecoder) = m.acting_version
 sbe_rewind!(m::SparseVectorMessageDecoder) = sbe_position!(m, m.offset + m.acting_block_length)
 
-@inline function sbe_decoded_length(m::SparseVectorMessageDecoder)
-    skipper = SparseVectorMessageEncoder(m.buffer, m.offset)
-    skip!(skipper)
-    return sbe_encoded_length(skipper)
+@inline function sbe_decoded_length(m::SparseVectorMessage)
+    sbe_rewind!(m)
+    skip!(m)
+    return sbe_position(m) - m.offset
 end
 
-function sbe_decoded_buffer(m::SparseVectorMessageDecoder)
-    offset = m.offset - sbe_encoded_length(MessageHeader())
+function sbe_message_buffer(m::SparseVectorMessage)
+    offset = m.offset - sbe_encoded_length(MessageHeader)
     offset < 0 && throw(ArgumentError("Message offset is negative"))
-    return view(m.buffer, offset+1:offset+sbe_decoded_length(m))
+    return view(m.buffer, offset+1:m.offset+sbe_decoded_length(m))
 end
 
-function sbe_encoded_buffer(m::SparseVectorMessageEncoder)
-    offset = m.offset - sbe_encoded_length(MessageHeader())
-    offset < 0 && throw(ArgumentError("Message offset is negative"))
-    d = SparseVectorMessageDecoder(m.buffer, MessageHeader(m.buffer, offset))
-    return view(d.buffer, offset+1:offset+sbe_decoded_length(d))
-end
 
 function header_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-header_id(::SparseVectorMessage) = 1
-header_since_version(::SparseVectorMessage) = 0
-header_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= 0
+header_id(::SparseVectorMessage) = UInt16(0x1)
+header_since_version(::SparseVectorMessage) = UInt16(0x0)
+header_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= UInt16(0x0)
 header_encoding_offset(::SparseVectorMessage) = 0
 header(m::SparseVectorMessage) = SpidersMessageHeader(m.buffer, m.offset + 0)
 
@@ -116,9 +117,9 @@ function format_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-format_id(::SparseVectorMessage) = 2
-format_since_version(::SparseVectorMessage) = 0
-format_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= 0
+format_id(::SparseVectorMessage) = UInt16(0x2)
+format_since_version(::SparseVectorMessage) = UInt16(0x0)
+format_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= UInt16(0x0)
 format_encoding_offset(::SparseVectorMessage) = 64
 format_encoding_length(::SparseVectorMessage) = 1
 @inline function format(::Type{Integer}, m::SparseVectorMessageDecoder)
@@ -133,9 +134,9 @@ function indiciesFormat_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-indiciesFormat_id(::SparseVectorMessage) = 3
-indiciesFormat_since_version(::SparseVectorMessage) = 0
-indiciesFormat_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= 0
+indiciesFormat_id(::SparseVectorMessage) = UInt16(0x3)
+indiciesFormat_since_version(::SparseVectorMessage) = UInt16(0x0)
+indiciesFormat_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= UInt16(0x0)
 indiciesFormat_encoding_offset(::SparseVectorMessage) = 65
 indiciesFormat_encoding_length(::SparseVectorMessage) = 1
 @inline function indiciesFormat(::Type{Integer}, m::SparseVectorMessageDecoder)
@@ -150,9 +151,9 @@ function indexing_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-indexing_id(::SparseVectorMessage) = 4
-indexing_since_version(::SparseVectorMessage) = 0
-indexing_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= 0
+indexing_id(::SparseVectorMessage) = UInt16(0x4)
+indexing_since_version(::SparseVectorMessage) = UInt16(0x0)
+indexing_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= UInt16(0x0)
 indexing_encoding_offset(::SparseVectorMessage) = 66
 indexing_encoding_length(::SparseVectorMessage) = 1
 @inline function indexing(::Type{Integer}, m::SparseVectorMessageDecoder)
@@ -167,9 +168,9 @@ function reserved1_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-reserved1_id(::SparseVectorMessage) = 5
-reserved1_since_version(::SparseVectorMessage) = 0
-reserved1_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= 0
+reserved1_id(::SparseVectorMessage) = UInt16(0x5)
+reserved1_since_version(::SparseVectorMessage) = UInt16(0x0)
+reserved1_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= UInt16(0x0)
 reserved1_encoding_offset(::SparseVectorMessage) = 67
 reserved1_null_value(::SparseVectorMessage) = Int8(-128)
 reserved1_min_value(::SparseVectorMessage) = Int8(-127)
@@ -185,9 +186,9 @@ function length_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-length_id(::SparseVectorMessage) = 6
-length_since_version(::SparseVectorMessage) = 0
-length_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= 0
+length_id(::SparseVectorMessage) = UInt16(0x6)
+length_since_version(::SparseVectorMessage) = UInt16(0x0)
+length_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= UInt16(0x0)
 length_encoding_offset(::SparseVectorMessage) = 68
 length_null_value(::SparseVectorMessage) = Int64(-9223372036854775808)
 length_min_value(::SparseVectorMessage) = Int64(-9223372036854775807)

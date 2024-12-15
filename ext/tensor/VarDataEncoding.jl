@@ -4,7 +4,7 @@
 struct VarDataEncoding{T<:AbstractArray{UInt8}}
     buffer::T
     offset::Int64
-    acting_version::Int64
+    acting_version::UInt16
     function VarDataEncoding(buffer::T, offset=0, acting_version=0) where {T}
         new{T}(buffer, offset, acting_version)
     end
@@ -12,23 +12,24 @@ end
 const VarDataEncodingDecoder = VarDataEncoding
 const VarDataEncodingEncoder = VarDataEncoding
 
-VarDataEncoding() = VarDataEncoding(UInt8[])
-
 sbe_buffer(m::VarDataEncoding) = m.buffer
 sbe_offset(m::VarDataEncoding) = m.offset
-sbe_decoded_buffer(m::VarDataEncoding) = view(m.buffer, m.offset+1:m.offset+-1)
+sbe_message_buffer(m::VarDataEncoding) = view(m.buffer, m.offset+1:m.offset+-1)
 sbe_acting_version(m::VarDataEncoding) = m.acting_version
-sbe_encoded_length(::VarDataEncoding) = typemax(UInt64)
-sbe_schema_id(::VarDataEncoding) = 1
-sbe_schema_version(::VarDataEncoding) = 0
+sbe_encoded_length(::VarDataEncoding) = typemax(UInt16)
+sbe_encoded_length(::Type{<:VarDataEncoding}) = typemax(UInt16)
+sbe_schema_id(::VarDataEncoding) = UInt16(0x1)
+sbe_schema_id(::Type{<:VarDataEncoding}) = UInt16(0x1)
+sbe_schema_version(::VarDataEncoding) = UInt16(0x0)
+sbe_schema_version(::Type{<:VarDataEncoding}) = UInt16(0x0)
 
 function length_meta_attribute(::VarDataEncoding, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-length_id(::VarDataEncoding) = -1
-length_since_version(::VarDataEncoding) = 0
-length_in_acting_version(m::VarDataEncoding) = sbe_acting_version(m) >= 0
+length_id(::VarDataEncoding) = UInt16(0xffffffffffffffff)
+length_since_version(::VarDataEncoding) = UInt16(0x0)
+length_in_acting_version(m::VarDataEncoding) = sbe_acting_version(m) >= UInt16(0x0)
 length_encoding_offset(::VarDataEncoding) = 0
 length_null_value(::VarDataEncoding) = UInt32(0xffffffff)
 length_min_value(::VarDataEncoding) = UInt32(0x0)
@@ -44,9 +45,9 @@ function varData_meta_attribute(::VarDataEncoding, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-varData_id(::VarDataEncoding) = -1
-varData_since_version(::VarDataEncoding) = 0
-varData_in_acting_version(m::VarDataEncoding) = sbe_acting_version(m) >= 0
+varData_id(::VarDataEncoding) = UInt16(0xffffffffffffffff)
+varData_since_version(::VarDataEncoding) = UInt16(0x0)
+varData_in_acting_version(m::VarDataEncoding) = sbe_acting_version(m) >= UInt16(0x0)
 varData_encoding_offset(::VarDataEncoding) = 4
 varData_null_value(::VarDataEncoding) = UInt8(0xff)
 varData_min_value(::VarDataEncoding) = UInt8(0x0)

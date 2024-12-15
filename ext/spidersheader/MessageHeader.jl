@@ -18,8 +18,8 @@ sbe_message_buffer(m::MessageHeader) = view(m.buffer, m.offset+1:m.offset+8)
 sbe_acting_version(m::MessageHeader) = m.acting_version
 sbe_encoded_length(::MessageHeader) = UInt16(0x8)
 sbe_encoded_length(::Type{<:MessageHeader}) = UInt16(0x8)
-sbe_schema_id(::MessageHeader) = UInt16(0x6)
-sbe_schema_id(::Type{<:MessageHeader}) = UInt16(0x6)
+sbe_schema_id(::MessageHeader) = UInt16(0x9)
+sbe_schema_id(::Type{<:MessageHeader}) = UInt16(0x9)
 sbe_schema_version(::MessageHeader) = UInt16(0x0)
 sbe_schema_version(::Type{<:MessageHeader}) = UInt16(0x0)
 

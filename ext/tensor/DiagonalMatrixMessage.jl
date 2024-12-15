@@ -7,108 +7,109 @@ struct DiagonalMatrixMessageDecoder{T<:AbstractArray{UInt8}} <: DiagonalMatrixMe
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    acting_block_length::Int64
-    acting_version::Int64
+    acting_block_length::UInt16
+    acting_version::UInt16
+    function DiagonalMatrixMessageDecoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64},
+        acting_block_length::UInt16, acting_version::UInt16) where {T}
+        position_ptr[] = offset + acting_block_length
+        new{T}(buffer, offset, position_ptr, acting_block_length, acting_version)
+    end
 end
 
 struct DiagonalMatrixMessageEncoder{T<:AbstractArray{UInt8}} <: DiagonalMatrixMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
+    function DiagonalMatrixMessageEncoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64}) where {T}
+        position_ptr[] = offset + 68
+        new{T}(buffer, offset, position_ptr)
+    end
 end
 
-@inline function DiagonalMatrixMessageDecoder(context::SbeCodecContext, buffer, offset,
-    acting_block_length, acting_version)
-    sbe_position!(context, offset + acting_block_length)
-    DiagonalMatrixMessageDecoder(buffer, offset, sbe_position_ptr(context), acting_block_length, acting_version)
+function DiagonalMatrixMessageDecoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+    hdr::MessageHeader)
+    if templateId(hdr) != UInt16(0x4) || schemaId(hdr) != UInt16(0x1)
+        error("Template id or schema id mismatch")
+    end
+    DiagonalMatrixMessageDecoder(buffer, offset + sbe_encoded_length(hdr), position_ptr,
+        blockLength(hdr), version(hdr))
 end
-
-@inline function DiagonalMatrixMessageDecoder(context::SbeCodecContext, buffer, offset, hdr::MessageHeader)
-    DiagonalMatrixMessageDecoder(context, buffer, offset + sbe_encoded_length(hdr),
-        Int64(blockLength(hdr)), Int64(version(hdr)))
+function DiagonalMatrixMessageDecoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64},
+    hdr::MessageHeader)
+    DiagonalMatrixMessageDecoder(buffer, 0, position_ptr, hdr)
 end
-
-@inline function DiagonalMatrixMessageDecoder(context::SbeCodecContext, buffer, hdr::MessageHeader)
-    DiagonalMatrixMessageDecoder(context, buffer, 0, hdr)
+function DiagonalMatrixMessageDecoder(buffer::AbstractArray, offset::Int,
+    acting_block_length::UInt16, acting_version::UInt16)
+    DiagonalMatrixMessageDecoder(buffer, offset, Ref(0), acting_block_length, acting_version)
 end
-@inline function DiagonalMatrixMessageDecoder(buffer, offset, acting_block_length, acting_version)
-    DiagonalMatrixMessageDecoder(SbeCodecContext(), buffer, offset, acting_block_length, acting_version)
+function DiagonalMatrixMessageDecoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+    DiagonalMatrixMessageDecoder(buffer, offset, Ref(0), hdr)
 end
-
-@inline DiagonalMatrixMessageDecoder(buffer, offset, hdr) = DiagonalMatrixMessageDecoder(SbeCodecContext(), buffer, offset, hdr)
-@inline DiagonalMatrixMessageDecoder(buffer, hdr) = DiagonalMatrixMessageDecoder(SbeCodecContext(), buffer, 0, hdr)
- @inline function DiagonalMatrixMessageEncoder(context::SbeCodecContext, buffer, offset=0)
-    sbe_position!(context, offset + 68)
-    DiagonalMatrixMessageEncoder(buffer, offset, sbe_position_ptr(context))
+DiagonalMatrixMessageDecoder(buffer::AbstractArray, hdr::MessageHeader) = DiagonalMatrixMessageDecoder(buffer, 0, Ref(0), hdr)
+function DiagonalMatrixMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64})
+    DiagonalMatrixMessageEncoder(buffer, 0, position_ptr)
 end
-@inline DiagonalMatrixMessageEncoder(buffer, offset=0) = DiagonalMatrixMessageEncoder(SbeCodecContext(), buffer, offset)
-@inline DiagonalMatrixMessage() = DiagonalMatrixMessageEncoder(SbeCodecContext(), UInt8[])
-
-@inline function DiagonalMatrixMessageEncoder(context::SbeCodecContext, buffer, offset, hdr::MessageHeader)
-    blockLength!(hdr, 68)
-    templateId!(hdr, 4)
-    schemaId!(hdr, 1)
-    version!(hdr, 0)
-    DiagonalMatrixMessageEncoder(context, buffer, offset + sbe_encoded_length(hdr))
+function DiagonalMatrixMessageEncoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+    hdr::MessageHeader)
+    blockLength!(hdr, UInt16(0x44))
+    templateId!(hdr, UInt16(0x4))
+    schemaId!(hdr, UInt16(0x1))
+    version!(hdr, UInt16(0x0))
+    DiagonalMatrixMessageEncoder(buffer, offset + sbe_encoded_length(hdr), position_ptr)
 end
-
-@inline function DiagonalMatrixMessageEncoder(context::SbeCodecContext, buffer, hdr::MessageHeader)
-    DiagonalMatrixMessageEncoder(context, buffer, 0, hdr)
+function DiagonalMatrixMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64}, hdr::MessageHeader)
+    DiagonalMatrixMessageEncoder(buffer, 0, position_ptr, hdr)
 end
-
-@inline function DiagonalMatrixMessageEncoder(buffer, offset, hdr::MessageHeader)
-    DiagonalMatrixMessageEncoder(SbeCodecContext(), buffer, offset, hdr)
+function DiagonalMatrixMessageEncoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+    DiagonalMatrixMessageEncoder(buffer, offset, Ref(0), hdr)
 end
-
-@inline function DiagonalMatrixMessageEncoder(buffer, hdr::MessageHeader)
-    DiagonalMatrixMessageEncoder(SbeCodecContext(), buffer, 0, hdr)
+function DiagonalMatrixMessageEncoder(buffer::AbstractArray, hdr::MessageHeader)
+    DiagonalMatrixMessageEncoder(buffer, 0, Ref(0), hdr)
 end
-
+DiagonalMatrixMessageEncoder(buffer::AbstractArray, offset::Int=0) = DiagonalMatrixMessageEncoder(buffer, offset, Ref(0))
 sbe_buffer(m::DiagonalMatrixMessage) = m.buffer
 sbe_offset(m::DiagonalMatrixMessage) = m.offset
 sbe_position_ptr(m::DiagonalMatrixMessage) = m.position_ptr
 sbe_position(m::DiagonalMatrixMessage) = m.position_ptr[]
 @inline sbe_check_position(m::DiagonalMatrixMessage, position) = (checkbounds(m.buffer, position + 1); position)
 @inline sbe_position!(m::DiagonalMatrixMessage, position) = m.position_ptr[] = position
-sbe_block_length(::DiagonalMatrixMessage) = 68
-sbe_template_id(::DiagonalMatrixMessage) = 4
-sbe_schema_id(::DiagonalMatrixMessage) = 1
-sbe_schema_version(::DiagonalMatrixMessage) = 0
+sbe_block_length(::DiagonalMatrixMessage) = UInt16(0x44)
+sbe_block_length(::Type{<:DiagonalMatrixMessage}) = UInt16(0x44)
+sbe_template_id(::DiagonalMatrixMessage) = UInt16(0x4)
+sbe_template_id(::Type{<:DiagonalMatrixMessage})  = UInt16(0x4)
+sbe_schema_id(::DiagonalMatrixMessage) = UInt16(0x1)
+sbe_schema_id(::Type{<:DiagonalMatrixMessage})  = UInt16(0x1)
+sbe_schema_version(::DiagonalMatrixMessage) = UInt16(0x0)
+sbe_schema_version(::Type{<:DiagonalMatrixMessage})  = UInt16(0x0)
 sbe_semantic_type(::DiagonalMatrixMessage) = ""
 sbe_semantic_version(::DiagonalMatrixMessage) = ""
 sbe_encoded_length(m::DiagonalMatrixMessageEncoder) = sbe_position(m) - m.offset
-sbe_rewind!(m::DiagonalMatrixMessageEncoder) = sbe_position!(m, m.offset + 68)
+sbe_rewind!(m::DiagonalMatrixMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x44))
 
 sbe_acting_block_length(m::DiagonalMatrixMessageDecoder) = m.acting_block_length
 sbe_acting_version(m::DiagonalMatrixMessageDecoder) = m.acting_version
 sbe_rewind!(m::DiagonalMatrixMessageDecoder) = sbe_position!(m, m.offset + m.acting_block_length)
 
-@inline function sbe_decoded_length(m::DiagonalMatrixMessageDecoder)
-    skipper = DiagonalMatrixMessageEncoder(m.buffer, m.offset)
-    skip!(skipper)
-    return sbe_encoded_length(skipper)
+@inline function sbe_decoded_length(m::DiagonalMatrixMessage)
+    sbe_rewind!(m)
+    skip!(m)
+    return sbe_position(m) - m.offset
 end
 
-function sbe_decoded_buffer(m::DiagonalMatrixMessageDecoder)
-    offset = m.offset - sbe_encoded_length(MessageHeader())
+function sbe_message_buffer(m::DiagonalMatrixMessage)
+    offset = m.offset - sbe_encoded_length(MessageHeader)
     offset < 0 && throw(ArgumentError("Message offset is negative"))
-    return view(m.buffer, offset+1:offset+sbe_decoded_length(m))
+    return view(m.buffer, offset+1:m.offset+sbe_decoded_length(m))
 end
 
-function sbe_encoded_buffer(m::DiagonalMatrixMessageEncoder)
-    offset = m.offset - sbe_encoded_length(MessageHeader())
-    offset < 0 && throw(ArgumentError("Message offset is negative"))
-    d = DiagonalMatrixMessageDecoder(m.buffer, MessageHeader(m.buffer, offset))
-    return view(d.buffer, offset+1:offset+sbe_decoded_length(d))
-end
 
 function header_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-header_id(::DiagonalMatrixMessage) = 1
-header_since_version(::DiagonalMatrixMessage) = 0
-header_in_acting_version(m::DiagonalMatrixMessage) = sbe_acting_version(m) >= 0
+header_id(::DiagonalMatrixMessage) = UInt16(0x1)
+header_since_version(::DiagonalMatrixMessage) = UInt16(0x0)
+header_in_acting_version(m::DiagonalMatrixMessage) = sbe_acting_version(m) >= UInt16(0x0)
 header_encoding_offset(::DiagonalMatrixMessage) = 0
 header(m::DiagonalMatrixMessage) = SpidersMessageHeader(m.buffer, m.offset + 0)
 
@@ -116,9 +117,9 @@ function format_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-format_id(::DiagonalMatrixMessage) = 2
-format_since_version(::DiagonalMatrixMessage) = 0
-format_in_acting_version(m::DiagonalMatrixMessage) = sbe_acting_version(m) >= 0
+format_id(::DiagonalMatrixMessage) = UInt16(0x2)
+format_since_version(::DiagonalMatrixMessage) = UInt16(0x0)
+format_in_acting_version(m::DiagonalMatrixMessage) = sbe_acting_version(m) >= UInt16(0x0)
 format_encoding_offset(::DiagonalMatrixMessage) = 64
 format_encoding_length(::DiagonalMatrixMessage) = 1
 @inline function format(::Type{Integer}, m::DiagonalMatrixMessageDecoder)
@@ -133,9 +134,9 @@ function indiciesFormat_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-indiciesFormat_id(::DiagonalMatrixMessage) = 3
-indiciesFormat_since_version(::DiagonalMatrixMessage) = 0
-indiciesFormat_in_acting_version(m::DiagonalMatrixMessage) = sbe_acting_version(m) >= 0
+indiciesFormat_id(::DiagonalMatrixMessage) = UInt16(0x3)
+indiciesFormat_since_version(::DiagonalMatrixMessage) = UInt16(0x0)
+indiciesFormat_in_acting_version(m::DiagonalMatrixMessage) = sbe_acting_version(m) >= UInt16(0x0)
 indiciesFormat_encoding_offset(::DiagonalMatrixMessage) = 65
 indiciesFormat_encoding_length(::DiagonalMatrixMessage) = 1
 @inline function indiciesFormat(::Type{Integer}, m::DiagonalMatrixMessageDecoder)
@@ -150,9 +151,9 @@ function reserved1_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
-reserved1_id(::DiagonalMatrixMessage) = 10
-reserved1_since_version(::DiagonalMatrixMessage) = 0
-reserved1_in_acting_version(m::DiagonalMatrixMessage) = sbe_acting_version(m) >= 0
+reserved1_id(::DiagonalMatrixMessage) = UInt16(0xa)
+reserved1_since_version(::DiagonalMatrixMessage) = UInt16(0x0)
+reserved1_in_acting_version(m::DiagonalMatrixMessage) = sbe_acting_version(m) >= UInt16(0x0)
 reserved1_encoding_offset(::DiagonalMatrixMessage) = 66
 reserved1_null_value(::DiagonalMatrixMessage) = Int8(-128)
 reserved1_min_value(::DiagonalMatrixMessage) = Int8(-127)
@@ -177,52 +178,52 @@ end
     copyto!(mappedarray(ltoh, htol, reinterpret(Int8, view(m.buffer, m.offset+66+1:m.offset+66+sizeof(Int8)*2))), value)
 end
 
-function shape_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
+function dims_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :semantic_type && return Symbol("int64")
     meta_attribute === :presence && return Symbol("required")
     error(lazy"unknown attribute: $meta_attribute")
 end
 
-shape_character_encoding(::DiagonalMatrixMessage) = "null"
-shape_in_acting_version(m::DiagonalMatrixMessage) = sbe_acting_version(m) >= 0
-shape_id(::DiagonalMatrixMessage) = 20
-shape_header_length(::DiagonalMatrixMessage) = 4
+dims_character_encoding(::DiagonalMatrixMessage) = "null"
+dims_in_acting_version(m::DiagonalMatrixMessage) = sbe_acting_version(m) >= 0
+dims_id(::DiagonalMatrixMessage) = 20
+dims_header_length(::DiagonalMatrixMessage) = 4
 
-@inline function shape_length(m::DiagonalMatrixMessage)
+@inline function dims_length(m::DiagonalMatrixMessage)
     return decode_le(UInt32, m.buffer, sbe_position(m))
 end
 
-@inline function shape_length!(m::DiagonalMatrixMessageEncoder, n)
+@inline function dims_length!(m::DiagonalMatrixMessageEncoder, n)
     if !checkbounds(Bool, m.buffer, sbe_position(m) + 1 + 4 + n)
         error("buffer too short for data length")
     end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
-@inline function skip_shape!(m::DiagonalMatrixMessage)
-    len = shape_length(m)
+@inline function skip_dims!(m::DiagonalMatrixMessage)
+    len = dims_length(m)
     pos = sbe_position(m) + len + 4
     sbe_position!(m, pos)
     return len
 end
 
-@inline function shape(m::DiagonalMatrixMessageDecoder)
-    len = shape_length(m)
+@inline function dims(m::DiagonalMatrixMessageDecoder)
+    len = dims_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     return view(m.buffer, pos+1:pos+len)
 end
 
-@inline function shape!(m::DiagonalMatrixMessageEncoder, len::Int)
-    shape_length!(m, len)
+@inline function dims!(m::DiagonalMatrixMessageEncoder, len::Int)
+    dims_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     return view(m.buffer, pos+1:pos+len)
 end
 
-@inline function shape!(m::DiagonalMatrixMessageEncoder, src)
+@inline function dims!(m::DiagonalMatrixMessageEncoder, src)
     len = Base.length(src)
-    shape_length!(m, len)
+    dims_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
@@ -304,8 +305,8 @@ function Base.show(io::IO, m::DiagonalMatrixMessage{T}) where {T}
     print(io, reserved1(writer))
 
     println(io)
-    print(io, "shape: ")
-    print(io, skip_shape!(writer))
+    print(io, "dims: ")
+    print(io, skip_dims!(writer))
     print(io, " bytes of raw data")
 
     println(io)
@@ -317,7 +318,7 @@ function Base.show(io::IO, m::DiagonalMatrixMessage{T}) where {T}
 end
 
 @inline function skip!(m::DiagonalMatrixMessage)
-    skip_shape!(m)
+    skip_dims!(m)
     skip_values!(m)
     return
 end

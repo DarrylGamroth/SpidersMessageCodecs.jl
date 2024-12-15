@@ -54,7 +54,7 @@
             id="4"
             description="Reserved field"
             type="Pad2" />
-        <data name="shape"
+        <data name="dims"
             id="20"
             description="Byte buffer array of int32 of size along each dimension."
             semanticType="int32"
@@ -91,7 +91,7 @@
             id="5"
             description="Reserved field"
             type="Pad1" />
-        <field name="shape"
+        <field name="dims"
             id="6"
             description="Size along each dimension"
             type="Int64Array2" />
@@ -164,7 +164,7 @@
             id="10"
             description="Reserved field"
             type="Pad2" />
-        <data name="shape"
+        <data name="dims"
             id="20"
             description="Byte buffer of int64 containing size along each dimension."
             semanticType="int64"

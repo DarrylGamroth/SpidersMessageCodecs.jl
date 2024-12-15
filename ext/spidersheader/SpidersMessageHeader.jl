@@ -18,8 +18,8 @@ sbe_message_buffer(m::SpidersMessageHeader) = view(m.buffer, m.offset+1:m.offset
 sbe_acting_version(m::SpidersMessageHeader) = m.acting_version
 sbe_encoded_length(::SpidersMessageHeader) = UInt16(0x40)
 sbe_encoded_length(::Type{<:SpidersMessageHeader}) = UInt16(0x40)
-sbe_schema_id(::SpidersMessageHeader) = UInt16(0x6)
-sbe_schema_id(::Type{<:SpidersMessageHeader}) = UInt16(0x6)
+sbe_schema_id(::SpidersMessageHeader) = UInt16(0x9)
+sbe_schema_id(::Type{<:SpidersMessageHeader}) = UInt16(0x9)
 sbe_schema_version(::SpidersMessageHeader) = UInt16(0x0)
 sbe_schema_version(::Type{<:SpidersMessageHeader}) = UInt16(0x0)
 
