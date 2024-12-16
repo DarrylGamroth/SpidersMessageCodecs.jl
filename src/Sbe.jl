@@ -1,3 +1,7 @@
+include("../ext/spidersheader/Spidersheader.jl")
+
+import .Spidersheader
+
 @valsplit function sbe_message_type(Val(templateId::UInt16), Val(schemaId::UInt16))
     throw(ArgumentError("Unknown message templateId=$templateId or schemaId=$schemaId"))
 end

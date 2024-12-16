@@ -1,9 +1,3 @@
-include("../ext/tensor/Tensor.jl")
-
-import .Tensor
-
-import .Tensor: sbe_message_buffer
-
 function sbe_message_type(
     ::Val{Tensor.sbe_template_id(Tensor.TensorMessage)},
     ::Val{Tensor.sbe_schema_id(Tensor.TensorMessage)})

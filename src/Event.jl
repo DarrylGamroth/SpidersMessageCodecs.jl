@@ -1,7 +1,6 @@
 include("../ext/event/Event.jl")
 
 import .Event
-
 import .Event: sbe_message_buffer
 
 # Return the SBE message type for the given templateId and schemaId
@@ -18,6 +17,13 @@ end
 is_sbe_message(::Type{<:Event.EventMessage}) = true
 
 abstract type SbeType end
+
+function Base.convert(::Type{UnsafeArray{UInt8}}, s::Symbol)
+    p = Base.unsafe_convert(Ptr{UInt8}, s)
+    p == C_NULL && throw(ArgumentError("invalid symbol"))
+    len = @ccall strlen(p::Ptr{UInt8})::Csize_t
+    UnsafeArray(p, (Int64(len),))
+end
 
 function Base.eltype(T::Event.Format.SbeEnum)
     T == Event.Format.NOTHING ? Nothing :
@@ -57,13 +63,6 @@ function event_format(::Type{T}) where {T}
     T <: SbeType ? Event.Format.SBE :
     is_sbe_message(T) ? Event.Format.SBE :
     throw(ArgumentError("unexpected type"))
-end
-
-function Base.convert(::Type{UnsafeArray{UInt8}}, s::Symbol)
-    p = Base.unsafe_convert(Ptr{UInt8}, s)
-    p == C_NULL && throw(ArgumentError("invalid symbol"))
-    len = @ccall strlen(p::Ptr{UInt8})::Csize_t
-    UnsafeArray(p, (Int64(len),))
 end
 
 Event.key(::Type{Symbol}, m::Event.EventMessage) = Symbol(Event.key(String, m))

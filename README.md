@@ -80,9 +80,17 @@ julia> dec()
 
 # Type-stable view into buffer
 julia> dec(Matrix{Int16})
+5×8 reshape(reinterpret(Int16, view(::Vector{UInt8}, 105:184)), 5, 8) with eltype Int16:
+  -3114   12073  -27310   13451   23514    9311  -25151  10918
+  27138  -27909  -17270   21362  -27810  -17819   24535    228
+  26611  -10223  -31011    6737   26844  -29897   -4325  15074
+ -22652   31731  -17446     318   10359   31078  -10769  29183
+ -10071   -8573   -9952  -12523  -13172   17110  -28278   8771
+
 ```
 
-Save to file (could be sent over network, mmap, Aeron, etc.) and recover:
+# Save to file (could be sent over network, mmap, Aeron, etc.) and recover:
+
 ```julia
 julia> write("tmp.dat", buf)
 
