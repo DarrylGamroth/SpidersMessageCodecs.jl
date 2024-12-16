@@ -1,6 +1,5 @@
 module SpidersMessageCodecs
 
-using BenchmarkTools
 using LinearAlgebra
 using StringViews
 using UnsafeArrays
