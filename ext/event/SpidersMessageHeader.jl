@@ -14,7 +14,6 @@ const SpidersMessageHeaderEncoder = SpidersMessageHeader
 
 sbe_buffer(m::SpidersMessageHeader) = m.buffer
 sbe_offset(m::SpidersMessageHeader) = m.offset
-sbe_message_buffer(m::SpidersMessageHeader) = view(m.buffer, m.offset+1:m.offset+64)
 sbe_acting_version(m::SpidersMessageHeader) = m.acting_version
 sbe_encoded_length(::SpidersMessageHeader) = UInt16(0x40)
 sbe_encoded_length(::Type{<:SpidersMessageHeader}) = UInt16(0x40)
@@ -25,7 +24,7 @@ sbe_schema_version(::Type{<:SpidersMessageHeader}) = UInt16(0x0)
 
 function channelRcvTimestampNs_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 channelRcvTimestampNs_id(::SpidersMessageHeader) = UInt16(0xffffffffffffffff)
 channelRcvTimestampNs_since_version(::SpidersMessageHeader) = UInt16(0x0)
@@ -43,7 +42,7 @@ end
 
 function channelSndTimestampNs_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 channelSndTimestampNs_id(::SpidersMessageHeader) = UInt16(0xffffffffffffffff)
 channelSndTimestampNs_since_version(::SpidersMessageHeader) = UInt16(0x0)
@@ -61,7 +60,7 @@ end
 
 function timestampNs_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 timestampNs_id(::SpidersMessageHeader) = UInt16(0xffffffffffffffff)
 timestampNs_since_version(::SpidersMessageHeader) = UInt16(0x0)
@@ -79,7 +78,7 @@ end
 
 function correlationId_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 correlationId_id(::SpidersMessageHeader) = UInt16(0xffffffffffffffff)
 correlationId_since_version(::SpidersMessageHeader) = UInt16(0x0)
@@ -97,7 +96,7 @@ end
 
 function tag_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 tag_id(::SpidersMessageHeader) = UInt16(0xffffffffffffffff)
 tag_since_version(::SpidersMessageHeader) = UInt16(0x0)
@@ -131,7 +130,7 @@ end
     copyto!(mappedarray(ltoh, htol, reinterpret(UInt8, view(m.buffer, m.offset+32+1:m.offset+32+sizeof(UInt8)*32))), value)
 end
 
-function Base.show(io::IO, writer::SpidersMessageHeader{T}) where {T}
+function show(io::IO, writer::SpidersMessageHeader{T}) where {T}
     println(io, "SpidersMessageHeader view over a type $T")
     print(io, "channelRcvTimestampNs: ")
     print(io, channelRcvTimestampNs(writer))

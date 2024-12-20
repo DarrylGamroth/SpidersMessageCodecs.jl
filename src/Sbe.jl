@@ -1,11 +1,13 @@
 include("../ext/spidersheader/Spidersheader.jl")
 
-import .Spidersheader
+using .Spidersheader
 
+# Return the SBE message type for the given templateId and schemaId
 @valsplit function sbe_message_type(Val(templateId::UInt16), Val(schemaId::UInt16))
     throw(ArgumentError("Unknown message templateId=$templateId or schemaId=$schemaId"))
 end
 
+# Type-unstable function to decode a SBE message
 function sbe_decoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue)
     header = Spidersheader.MessageHeader(buffer, offset)
     templateId = Spidersheader.templateId(header)

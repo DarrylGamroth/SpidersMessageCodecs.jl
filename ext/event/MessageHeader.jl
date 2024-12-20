@@ -14,7 +14,6 @@ const MessageHeaderEncoder = MessageHeader
 
 sbe_buffer(m::MessageHeader) = m.buffer
 sbe_offset(m::MessageHeader) = m.offset
-sbe_message_buffer(m::MessageHeader) = view(m.buffer, m.offset+1:m.offset+8)
 sbe_acting_version(m::MessageHeader) = m.acting_version
 sbe_encoded_length(::MessageHeader) = UInt16(0x8)
 sbe_encoded_length(::Type{<:MessageHeader}) = UInt16(0x8)
@@ -25,7 +24,7 @@ sbe_schema_version(::Type{<:MessageHeader}) = UInt16(0x0)
 
 function blockLength_meta_attribute(::MessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 blockLength_id(::MessageHeader) = UInt16(0xffffffffffffffff)
 blockLength_since_version(::MessageHeader) = UInt16(0x0)
@@ -43,7 +42,7 @@ end
 
 function templateId_meta_attribute(::MessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 templateId_id(::MessageHeader) = UInt16(0xffffffffffffffff)
 templateId_since_version(::MessageHeader) = UInt16(0x0)
@@ -61,7 +60,7 @@ end
 
 function schemaId_meta_attribute(::MessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 schemaId_id(::MessageHeader) = UInt16(0xffffffffffffffff)
 schemaId_since_version(::MessageHeader) = UInt16(0x0)
@@ -79,7 +78,7 @@ end
 
 function version_meta_attribute(::MessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 version_id(::MessageHeader) = UInt16(0xffffffffffffffff)
 version_since_version(::MessageHeader) = UInt16(0x0)
@@ -95,7 +94,7 @@ version_encoding_length(::MessageHeader) = 2
 end
 @inline version!(m::MessageHeaderEncoder, value) = encode_le(UInt16, m.buffer, m.offset + 6, value)
 
-function Base.show(io::IO, writer::MessageHeader{T}) where {T}
+function show(io::IO, writer::MessageHeader{T}) where {T}
     println(io, "MessageHeader view over a type $T")
     print(io, "blockLength: ")
     print(io, blockLength(writer))

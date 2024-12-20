@@ -71,8 +71,7 @@ sbe_buffer(m::DiagonalMatrixMessage) = m.buffer
 sbe_offset(m::DiagonalMatrixMessage) = m.offset
 sbe_position_ptr(m::DiagonalMatrixMessage) = m.position_ptr
 sbe_position(m::DiagonalMatrixMessage) = m.position_ptr[]
-@inline sbe_check_position(m::DiagonalMatrixMessage, position) = (checkbounds(m.buffer, position + 1); position)
-@inline sbe_position!(m::DiagonalMatrixMessage, position) = m.position_ptr[] = position
+sbe_position!(m::DiagonalMatrixMessage, position) = m.position_ptr[] = position
 sbe_block_length(::DiagonalMatrixMessage) = UInt16(0x44)
 sbe_block_length(::Type{<:DiagonalMatrixMessage}) = UInt16(0x44)
 sbe_template_id(::DiagonalMatrixMessage) = UInt16(0x4)
@@ -83,39 +82,34 @@ sbe_schema_version(::DiagonalMatrixMessage) = UInt16(0x0)
 sbe_schema_version(::Type{<:DiagonalMatrixMessage})  = UInt16(0x0)
 sbe_semantic_type(::DiagonalMatrixMessage) = ""
 sbe_semantic_version(::DiagonalMatrixMessage) = ""
-sbe_encoded_length(m::DiagonalMatrixMessageEncoder) = sbe_position(m) - m.offset
-sbe_rewind!(m::DiagonalMatrixMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x44))
-
 sbe_acting_block_length(m::DiagonalMatrixMessageDecoder) = m.acting_block_length
+sbe_acting_block_length(::DiagonalMatrixMessageEncoder) = UInt16(0x44)
 sbe_acting_version(m::DiagonalMatrixMessageDecoder) = m.acting_version
-sbe_rewind!(m::DiagonalMatrixMessageDecoder) = sbe_position!(m, m.offset + m.acting_block_length)
-
+sbe_acting_version(::DiagonalMatrixMessageEncoder) = UInt16(0x0)
+sbe_rewind!(m::DiagonalMatrixMessage) = sbe_position!(m, m.offset + m.acting_block_length)
+sbe_rewind!(m::DiagonalMatrixMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x44))
+sbe_encoded_length(m::DiagonalMatrixMessage) = sbe_position(m) - m.offset
 @inline function sbe_decoded_length(m::DiagonalMatrixMessage)
-    sbe_rewind!(m)
-    skip!(m)
-    return sbe_position(m) - m.offset
+    skipper = DiagonalMatrixMessageDecoder(sbe_buffer(m), sbe_offset(m),
+        sbe_acting_block_length(m), sbe_acting_version(m))
+    sbe_rewind!(skipper)
+    skip!(skipper)
+    sbe_encoded_length(skipper)
 end
-
-function sbe_message_buffer(m::DiagonalMatrixMessage)
-    offset = m.offset - sbe_encoded_length(MessageHeader)
-    offset < 0 && throw(ArgumentError("Message offset is negative"))
-    return view(m.buffer, offset+1:m.offset+sbe_decoded_length(m))
-end
-
 
 function header_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 header_id(::DiagonalMatrixMessage) = UInt16(0x1)
 header_since_version(::DiagonalMatrixMessage) = UInt16(0x0)
 header_in_acting_version(m::DiagonalMatrixMessage) = sbe_acting_version(m) >= UInt16(0x0)
 header_encoding_offset(::DiagonalMatrixMessage) = 0
-header(m::DiagonalMatrixMessage) = SpidersMessageHeader(m.buffer, m.offset + 0)
+header(m::DiagonalMatrixMessage) = SpidersMessageHeader(m.buffer, m.offset + 0, sbe_acting_version(m))
 
 function format_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 format_id(::DiagonalMatrixMessage) = UInt16(0x2)
 format_since_version(::DiagonalMatrixMessage) = UInt16(0x0)
@@ -132,7 +126,7 @@ end
 
 function indiciesFormat_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 indiciesFormat_id(::DiagonalMatrixMessage) = UInt16(0x3)
 indiciesFormat_since_version(::DiagonalMatrixMessage) = UInt16(0x0)
@@ -149,7 +143,7 @@ end
 
 function reserved1_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 reserved1_id(::DiagonalMatrixMessage) = UInt16(0xa)
 reserved1_since_version(::DiagonalMatrixMessage) = UInt16(0x0)
@@ -181,7 +175,7 @@ end
 function dims_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :semantic_type && return Symbol("int64")
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 
 dims_character_encoding(::DiagonalMatrixMessage) = "null"
@@ -196,6 +190,8 @@ end
 @inline function dims_length!(m::DiagonalMatrixMessageEncoder, n)
     if !checkbounds(Bool, m.buffer, sbe_position(m) + 1 + 4 + n)
         error("buffer too short for data length")
+    elseif n > 1073741824
+        error("data length too large for length type")
     end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
@@ -232,7 +228,7 @@ end
 
 function values_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 
 values_character_encoding(::DiagonalMatrixMessage) = "null"
@@ -247,6 +243,8 @@ end
 @inline function values_length!(m::DiagonalMatrixMessageEncoder, n)
     if !checkbounds(Bool, m.buffer, sbe_position(m) + 1 + 4 + n)
         error("buffer too short for data length")
+    elseif n > 1073741824
+        error("data length too large for length type")
     end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
@@ -281,7 +279,7 @@ end
     copyto!(dest, src)
 end
 
-function Base.show(io::IO, m::DiagonalMatrixMessage{T}) where {T}
+function show(io::IO, m::DiagonalMatrixMessage{T}) where {T}
     println(io, "DiagonalMatrixMessage view over a type $T")
     println(io, "SbeBlockLength: ", sbe_block_length(m))
     println(io, "SbeTemplateId:  ", sbe_template_id(m))
@@ -290,7 +288,7 @@ function Base.show(io::IO, m::DiagonalMatrixMessage{T}) where {T}
 
     writer = DiagonalMatrixMessageDecoder(sbe_buffer(m), sbe_offset(m), sbe_block_length(m), sbe_schema_version(m))
     print(io, "header: ")
-    Base.show(io, header(writer))
+    show(io, header(writer))
 
     println(io)
     print(io, "format: ")

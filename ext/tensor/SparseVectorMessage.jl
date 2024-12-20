@@ -71,8 +71,7 @@ sbe_buffer(m::SparseVectorMessage) = m.buffer
 sbe_offset(m::SparseVectorMessage) = m.offset
 sbe_position_ptr(m::SparseVectorMessage) = m.position_ptr
 sbe_position(m::SparseVectorMessage) = m.position_ptr[]
-@inline sbe_check_position(m::SparseVectorMessage, position) = (checkbounds(m.buffer, position + 1); position)
-@inline sbe_position!(m::SparseVectorMessage, position) = m.position_ptr[] = position
+sbe_position!(m::SparseVectorMessage, position) = m.position_ptr[] = position
 sbe_block_length(::SparseVectorMessage) = UInt16(0x4c)
 sbe_block_length(::Type{<:SparseVectorMessage}) = UInt16(0x4c)
 sbe_template_id(::SparseVectorMessage) = UInt16(0x3)
@@ -83,39 +82,34 @@ sbe_schema_version(::SparseVectorMessage) = UInt16(0x0)
 sbe_schema_version(::Type{<:SparseVectorMessage})  = UInt16(0x0)
 sbe_semantic_type(::SparseVectorMessage) = ""
 sbe_semantic_version(::SparseVectorMessage) = ""
-sbe_encoded_length(m::SparseVectorMessageEncoder) = sbe_position(m) - m.offset
-sbe_rewind!(m::SparseVectorMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x4c))
-
 sbe_acting_block_length(m::SparseVectorMessageDecoder) = m.acting_block_length
+sbe_acting_block_length(::SparseVectorMessageEncoder) = UInt16(0x4c)
 sbe_acting_version(m::SparseVectorMessageDecoder) = m.acting_version
-sbe_rewind!(m::SparseVectorMessageDecoder) = sbe_position!(m, m.offset + m.acting_block_length)
-
+sbe_acting_version(::SparseVectorMessageEncoder) = UInt16(0x0)
+sbe_rewind!(m::SparseVectorMessage) = sbe_position!(m, m.offset + m.acting_block_length)
+sbe_rewind!(m::SparseVectorMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x4c))
+sbe_encoded_length(m::SparseVectorMessage) = sbe_position(m) - m.offset
 @inline function sbe_decoded_length(m::SparseVectorMessage)
-    sbe_rewind!(m)
-    skip!(m)
-    return sbe_position(m) - m.offset
+    skipper = SparseVectorMessageDecoder(sbe_buffer(m), sbe_offset(m),
+        sbe_acting_block_length(m), sbe_acting_version(m))
+    sbe_rewind!(skipper)
+    skip!(skipper)
+    sbe_encoded_length(skipper)
 end
-
-function sbe_message_buffer(m::SparseVectorMessage)
-    offset = m.offset - sbe_encoded_length(MessageHeader)
-    offset < 0 && throw(ArgumentError("Message offset is negative"))
-    return view(m.buffer, offset+1:m.offset+sbe_decoded_length(m))
-end
-
 
 function header_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 header_id(::SparseVectorMessage) = UInt16(0x1)
 header_since_version(::SparseVectorMessage) = UInt16(0x0)
 header_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= UInt16(0x0)
 header_encoding_offset(::SparseVectorMessage) = 0
-header(m::SparseVectorMessage) = SpidersMessageHeader(m.buffer, m.offset + 0)
+header(m::SparseVectorMessage) = SpidersMessageHeader(m.buffer, m.offset + 0, sbe_acting_version(m))
 
 function format_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 format_id(::SparseVectorMessage) = UInt16(0x2)
 format_since_version(::SparseVectorMessage) = UInt16(0x0)
@@ -132,7 +126,7 @@ end
 
 function indiciesFormat_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 indiciesFormat_id(::SparseVectorMessage) = UInt16(0x3)
 indiciesFormat_since_version(::SparseVectorMessage) = UInt16(0x0)
@@ -149,7 +143,7 @@ end
 
 function indexing_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 indexing_id(::SparseVectorMessage) = UInt16(0x4)
 indexing_since_version(::SparseVectorMessage) = UInt16(0x0)
@@ -166,7 +160,7 @@ end
 
 function reserved1_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 reserved1_id(::SparseVectorMessage) = UInt16(0x5)
 reserved1_since_version(::SparseVectorMessage) = UInt16(0x0)
@@ -184,7 +178,7 @@ end
 
 function length_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 length_id(::SparseVectorMessage) = UInt16(0x6)
 length_since_version(::SparseVectorMessage) = UInt16(0x0)
@@ -203,7 +197,7 @@ end
 function indicies_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :semantic_type && return Symbol("int64")
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 
 indicies_character_encoding(::SparseVectorMessage) = "null"
@@ -218,6 +212,8 @@ end
 @inline function indicies_length!(m::SparseVectorMessageEncoder, n)
     if !checkbounds(Bool, m.buffer, sbe_position(m) + 1 + 4 + n)
         error("buffer too short for data length")
+    elseif n > 1073741824
+        error("data length too large for length type")
     end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
@@ -254,7 +250,7 @@ end
 
 function values_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 
 values_character_encoding(::SparseVectorMessage) = "null"
@@ -269,6 +265,8 @@ end
 @inline function values_length!(m::SparseVectorMessageEncoder, n)
     if !checkbounds(Bool, m.buffer, sbe_position(m) + 1 + 4 + n)
         error("buffer too short for data length")
+    elseif n > 1073741824
+        error("data length too large for length type")
     end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
@@ -303,7 +301,7 @@ end
     copyto!(dest, src)
 end
 
-function Base.show(io::IO, m::SparseVectorMessage{T}) where {T}
+function show(io::IO, m::SparseVectorMessage{T}) where {T}
     println(io, "SparseVectorMessage view over a type $T")
     println(io, "SbeBlockLength: ", sbe_block_length(m))
     println(io, "SbeTemplateId:  ", sbe_template_id(m))
@@ -312,7 +310,7 @@ function Base.show(io::IO, m::SparseVectorMessage{T}) where {T}
 
     writer = SparseVectorMessageDecoder(sbe_buffer(m), sbe_offset(m), sbe_block_length(m), sbe_schema_version(m))
     print(io, "header: ")
-    Base.show(io, header(writer))
+    show(io, header(writer))
 
     println(io)
     print(io, "format: ")

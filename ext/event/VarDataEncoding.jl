@@ -14,7 +14,6 @@ const VarDataEncodingEncoder = VarDataEncoding
 
 sbe_buffer(m::VarDataEncoding) = m.buffer
 sbe_offset(m::VarDataEncoding) = m.offset
-sbe_message_buffer(m::VarDataEncoding) = view(m.buffer, m.offset+1:m.offset+-1)
 sbe_acting_version(m::VarDataEncoding) = m.acting_version
 sbe_encoded_length(::VarDataEncoding) = typemax(UInt16)
 sbe_encoded_length(::Type{<:VarDataEncoding}) = typemax(UInt16)
@@ -25,7 +24,7 @@ sbe_schema_version(::Type{<:VarDataEncoding}) = UInt16(0x0)
 
 function length_meta_attribute(::VarDataEncoding, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 length_id(::VarDataEncoding) = UInt16(0xffffffffffffffff)
 length_since_version(::VarDataEncoding) = UInt16(0x0)
@@ -43,7 +42,7 @@ end
 
 function varData_meta_attribute(::VarDataEncoding, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 varData_id(::VarDataEncoding) = UInt16(0xffffffffffffffff)
 varData_since_version(::VarDataEncoding) = UInt16(0x0)
@@ -54,7 +53,7 @@ varData_min_value(::VarDataEncoding) = UInt8(0x0)
 varData_max_value(::VarDataEncoding) = UInt8(0xfe)
 varData_encoding_length(::VarDataEncoding) = -1
 
-function Base.show(io::IO, writer::VarDataEncoding{T}) where {T}
+function show(io::IO, writer::VarDataEncoding{T}) where {T}
     println(io, "VarDataEncoding view over a type $T")
     print(io, "length: ")
     print(io, length(writer))

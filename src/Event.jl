@@ -1,7 +1,7 @@
 include("../ext/event/Event.jl")
 
-import .Event
-import .Event: sbe_message_buffer
+using .Event
+export Event
 
 # Return the SBE message type for the given templateId and schemaId
 function sbe_message_type(
@@ -16,14 +16,15 @@ end
 
 is_sbe_message(::Type{<:Event.EventMessage}) = true
 
-abstract type SbeType end
-
-function Base.convert(::Type{UnsafeArray{UInt8}}, s::Symbol)
-    p = Base.unsafe_convert(Ptr{UInt8}, s)
-    p == C_NULL && throw(ArgumentError("invalid symbol"))
-    len = @ccall strlen(p::Ptr{UInt8})::Csize_t
-    UnsafeArray(p, (Int64(len),))
+function sbe_message_buffer(m::Event.EventMessage)
+    offset = Event.sbe_offset(m) - Event.sbe_encoded_length(Event.MessageHeader)
+    sbe_rewind!(m)
+    Event.skip!(m)
+    offset < 0 && throw(ArgumentError("Message offset is negative"))
+    return view(Event.sbe_buffer(m), offset+1:Event.sbe_offset(m)+Event.sbe_encoded_length(m))
 end
+
+abstract type SbeType end
 
 function Base.eltype(T::Event.Format.SbeEnum)
     T == Event.Format.NOTHING ? Nothing :
@@ -168,7 +169,7 @@ function Base.show(io::IO, m::Event.EventMessage{T}) where {T}
     writer = Event.EventMessageDecoder(Event.sbe_buffer(m), Event.sbe_offset(m),
         Event.sbe_block_length(m), Event.sbe_schema_version(m))
     print(io, "header: ")
-    Base.show(io, Event.header(writer))
+    Event.show(io, Event.header(writer))
 
     println(io)
     print(io, "format: ")

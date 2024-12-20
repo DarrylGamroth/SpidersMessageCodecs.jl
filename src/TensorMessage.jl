@@ -10,6 +10,14 @@ end
 
 is_sbe_message(::Type{<:Tensor.TensorMessage}) = true
 
+function sbe_message_buffer(m::Tensor.TensorMessage)
+    offset = Tensor.sbe_offset(m) - Tensor.sbe_encoded_length(Tensor.MessageHeader)
+    Tensor.sbe_rewind!(m)
+    Tensor.skip!(m)
+    offset < 0 && throw(ArgumentError("Message offset is negative"))
+    return view(Tensor.sbe_buffer(m), offset+1:Tensor.sbe_offset(m)+Tensor.sbe_encoded_length(m))
+end
+
 function Base.eltype(T::Tensor.Format.SbeEnum)
     T == Tensor.Format.UINT8 ? UInt8 :
     T == Tensor.Format.INT8 ? Int8 :
@@ -148,7 +156,7 @@ function Base.show(io::IO, m::Tensor.TensorMessage{T}) where {T}
     writer = Tensor.TensorMessageDecoder(Tensor.sbe_buffer(m), Tensor.sbe_offset(m),
         Tensor.sbe_block_length(m), Tensor.sbe_schema_version(m))
     print(io, "header: ")
-    show(io, Tensor.header(writer))
+    Tensor.show(io, Tensor.header(writer))
 
     println(io)
     print(io, "format: ")

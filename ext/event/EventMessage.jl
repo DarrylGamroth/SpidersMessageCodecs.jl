@@ -71,8 +71,7 @@ sbe_buffer(m::EventMessage) = m.buffer
 sbe_offset(m::EventMessage) = m.offset
 sbe_position_ptr(m::EventMessage) = m.position_ptr
 sbe_position(m::EventMessage) = m.position_ptr[]
-@inline sbe_check_position(m::EventMessage, position) = (checkbounds(m.buffer, position + 1); position)
-@inline sbe_position!(m::EventMessage, position) = m.position_ptr[] = position
+sbe_position!(m::EventMessage, position) = m.position_ptr[] = position
 sbe_block_length(::EventMessage) = UInt16(0x64)
 sbe_block_length(::Type{<:EventMessage}) = UInt16(0x64)
 sbe_template_id(::EventMessage) = UInt16(0x1)
@@ -83,39 +82,34 @@ sbe_schema_version(::EventMessage) = UInt16(0x0)
 sbe_schema_version(::Type{<:EventMessage})  = UInt16(0x0)
 sbe_semantic_type(::EventMessage) = ""
 sbe_semantic_version(::EventMessage) = ""
-sbe_encoded_length(m::EventMessageEncoder) = sbe_position(m) - m.offset
-sbe_rewind!(m::EventMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x64))
-
 sbe_acting_block_length(m::EventMessageDecoder) = m.acting_block_length
+sbe_acting_block_length(::EventMessageEncoder) = UInt16(0x64)
 sbe_acting_version(m::EventMessageDecoder) = m.acting_version
-sbe_rewind!(m::EventMessageDecoder) = sbe_position!(m, m.offset + m.acting_block_length)
-
+sbe_acting_version(::EventMessageEncoder) = UInt16(0x0)
+sbe_rewind!(m::EventMessage) = sbe_position!(m, m.offset + m.acting_block_length)
+sbe_rewind!(m::EventMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x64))
+sbe_encoded_length(m::EventMessage) = sbe_position(m) - m.offset
 @inline function sbe_decoded_length(m::EventMessage)
-    sbe_rewind!(m)
-    skip!(m)
-    return sbe_position(m) - m.offset
+    skipper = EventMessageDecoder(sbe_buffer(m), sbe_offset(m),
+        sbe_acting_block_length(m), sbe_acting_version(m))
+    sbe_rewind!(skipper)
+    skip!(skipper)
+    sbe_encoded_length(skipper)
 end
-
-function sbe_message_buffer(m::EventMessage)
-    offset = m.offset - sbe_encoded_length(MessageHeader)
-    offset < 0 && throw(ArgumentError("Message offset is negative"))
-    return view(m.buffer, offset+1:m.offset+sbe_decoded_length(m))
-end
-
 
 function header_meta_attribute(::EventMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 header_id(::EventMessage) = UInt16(0x1)
 header_since_version(::EventMessage) = UInt16(0x0)
 header_in_acting_version(m::EventMessage) = sbe_acting_version(m) >= UInt16(0x0)
 header_encoding_offset(::EventMessage) = 0
-header(m::EventMessage) = SpidersMessageHeader(m.buffer, m.offset + 0)
+header(m::EventMessage) = SpidersMessageHeader(m.buffer, m.offset + 0, sbe_acting_version(m))
 
 function format_meta_attribute(::EventMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 format_id(::EventMessage) = UInt16(0x2)
 format_since_version(::EventMessage) = UInt16(0x0)
@@ -132,7 +126,7 @@ end
 
 function reserved1_meta_attribute(::EventMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 reserved1_id(::EventMessage) = UInt16(0x9)
 reserved1_since_version(::EventMessage) = UInt16(0x0)
@@ -163,7 +157,7 @@ end
 
 function key_meta_attribute(::EventMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 key_id(::EventMessage) = UInt16(0xa)
 key_since_version(::EventMessage) = UInt16(0x0)
@@ -199,7 +193,7 @@ end
 
 function value_meta_attribute(::EventMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
-    error(lazy"unknown attribute: $meta_attribute")
+    return Symbol("")
 end
 
 value_character_encoding(::EventMessage) = "null"
@@ -214,6 +208,8 @@ end
 @inline function value_length!(m::EventMessageEncoder, n)
     if !checkbounds(Bool, m.buffer, sbe_position(m) + 1 + 4 + n)
         error("buffer too short for data length")
+    elseif n > 1073741824
+        error("data length too large for length type")
     end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
@@ -248,7 +244,7 @@ end
     copyto!(dest, src)
 end
 
-function Base.show(io::IO, m::EventMessage{T}) where {T}
+function show(io::IO, m::EventMessage{T}) where {T}
     println(io, "EventMessage view over a type $T")
     println(io, "SbeBlockLength: ", sbe_block_length(m))
     println(io, "SbeTemplateId:  ", sbe_template_id(m))
@@ -257,7 +253,7 @@ function Base.show(io::IO, m::EventMessage{T}) where {T}
 
     writer = EventMessageDecoder(sbe_buffer(m), sbe_offset(m), sbe_block_length(m), sbe_schema_version(m))
     print(io, "header: ")
-    Base.show(io, header(writer))
+    show(io, header(writer))
 
     println(io)
     print(io, "format: ")

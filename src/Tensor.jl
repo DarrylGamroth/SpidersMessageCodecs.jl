@@ -1,7 +1,7 @@
 include("../ext/tensor/Tensor.jl")
 
-import .Tensor
-import .Tensor: sbe_message_buffer
+using .Tensor
+export Tensor
 
 include("TensorMessage.jl")
 # Add other tensor types here
