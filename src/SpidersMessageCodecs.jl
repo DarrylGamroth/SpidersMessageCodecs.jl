@@ -1,22 +1,34 @@
 module SpidersMessageCodecs
 
-using LinearAlgebra
-using StringViews
 using UnsafeArrays
 using ValSplit
 
-function Base.convert(::Type{UnsafeArray{UInt8}}, s::Symbol)
-    p = Base.unsafe_convert(Ptr{UInt8}, s)
-    len = @ccall strlen(p::Ptr{UInt8})::Csize_t
-    UnsafeArray(p, (Int64(len),))
-end
+include("spidersheader/Spidersheader.jl")
+include("event/Event.jl")
+include("tensor/Tensor.jl")
 
-# Include SBE generated code
-include("Tensor.jl")
+include("sbe.jl")
 
-# Include Event last
-include("Event.jl")
+include("utils.jl")
 
-include("Sbe.jl")
+using .Spidersheader
+export Spidersheader
+
+using .Event
+export Event
+
+using .Tensor
+export Tensor
+
+using .Sbe
+export Sbe
+
+include("../ext/EventEx.jl")
+using .EventEx
+export EventEx
+
+include("../ext/TensorEx.jl")
+using .TensorEx
+export TensorEx
 
 end # module SpidersMessageCodecs

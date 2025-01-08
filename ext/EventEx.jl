@@ -1,22 +1,22 @@
-include("../ext/event/Event.jl")
+module EventEx
 
-using .Event
-export Event
+using ..Event
+using ..Sbe
 
 # Return the SBE message type for the given templateId and schemaId
-function sbe_message_type(
+function Sbe.message_type(
     ::Val{Event.sbe_template_id(Event.EventMessage)},
     ::Val{Event.sbe_schema_id(Event.EventMessage)})
     Event.EventMessage
 end
 
-function sbe_decoder(::Type{T}, buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue) where {T<:Event.EventMessage}
+function Sbe.decoder(::Type{T}, buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue) where {T<:Event.EventMessage}
     Event.EventMessageDecoder(buffer, offset, position_ptr, Event.MessageHeader(buffer))
 end
 
-is_sbe_message(::Type{<:Event.EventMessage}) = true
+Sbe.is_sbe_message(::Type{<:Event.EventMessage}) = true
 
-function sbe_message_buffer(m::Event.EventMessage)
+function Sbe.message_buffer(m::Event.EventMessage)
     offset = Event.sbe_offset(m) - Event.sbe_encoded_length(Event.MessageHeader)
     Event.sbe_rewind!(m)
     Event.skip!(m)
@@ -62,7 +62,7 @@ function event_format(::Type{T}) where {T}
     T <: AbstractVector{UInt8} ? Event.Format.BYTES :
     T <: Symbol ? Event.Format.STRING :
     T <: SbeType ? Event.Format.SBE :
-    is_sbe_message(T) ? Event.Format.SBE :
+    Sbe.is_sbe_message(T) ? Event.Format.SBE :
     throw(ArgumentError("unexpected type"))
 end
 
@@ -72,13 +72,13 @@ Event.value(::Type{Symbol}, m::Event.EventMessage) = Symbol(Event.value(String, 
 Event.value(::Type{T}, m::Event.EventMessage) where {T<:Real} = reinterpret(T, Event.value(m))[]
 Event.value(::Type{<:AbstractString}, m::Event.EventMessage) = StringView(Event.value(m))
 Event.value(::Type{<:AbstractVector{UInt8}}, m::Event.EventMessage) = Event.value(m)
-Event.value(::Type{<:SbeType}, m::Event.EventMessage) = sbe_decoder(Event.value(m), m.position_ptr)
+Event.value(::Type{<:SbeType}, m::Event.EventMessage) = Sbe.decoder(Event.value(m), m.position_ptr)
 Event.value!(T::Type{<:Real}, m::Event.EventMessage, len::Int) = reinterpret(T, Event.value!(m, sizeof(T) * len))
 Event.value!(m::Event.EventMessage, key_value::Tuple{AbstractString,T}) where {T} = Event.value!(m, key_value...)
 
 @inline function Event.value(::Type{T}, m::Event.EventMessage) where {T}
-    is_sbe_message(T) || throw(ArgumentError("unexpected type, got $T"))
-    sbe_decoder(T, Event.value(m), m.position_ptr)
+    Sbe.is_sbe_message(T) || throw(ArgumentError("unexpected type, got $T"))
+    Sbe.decoder(T, Event.value(m), m.position_ptr)
 end
 
 @inline function (m::Event.EventMessageDecoder)()
@@ -90,7 +90,7 @@ end
 @inline function (m::Event.EventMessageDecoder)(::Type{T}) where {T}
     Event.sbe_rewind!(m)
     let type = Base.eltype(Event.format(m))
-        T <: type || is_sbe_message(T) || throw(ArgumentError("unexpected type, expected $T got $type"))
+        T <: type || Sbe.is_sbe_message(T) || throw(ArgumentError("unexpected type, expected $T got $type"))
     end
     Pair(Event.key(Symbol, m), Event.value(T, m))
 end
@@ -151,10 +151,10 @@ end
 
 @inline function (m::Event.EventMessageEncoder)(key::AbstractString, value::T) where {T}
     Event.sbe_rewind!(m)
-    is_sbe_message(T) || throw(ArgumentError("unexpected type, got $T"))
+    Sbe.is_sbe_message(T) || throw(ArgumentError("unexpected type, got $T"))
     Event.format!(m, event_format(T))
     key!(m, key)
-    buf = sbe_message_buffer(value)
+    buf = Sbe.message_buffer(value)
     Event.value!(m, buf)
     nothing
 end
@@ -187,3 +187,5 @@ function Base.show(io::IO, m::Event.EventMessage{T}) where {T}
 
     nothing
 end
+
+end # module EventEx

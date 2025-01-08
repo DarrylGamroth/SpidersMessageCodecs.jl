@@ -1,16 +1,16 @@
-function sbe_message_type(
+function Sbe.message_type(
     ::Val{Tensor.sbe_template_id(Tensor.TensorMessage)},
     ::Val{Tensor.sbe_schema_id(Tensor.TensorMessage)})
     Tensor.TensorMessage
 end
 
-function sbe_decoder(::Type{T}, buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue) where {T<:Tensor.TensorMessage}
+function Sbe.decoder(::Type{T}, buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue) where {T<:Tensor.TensorMessage}
     Tensor.TensorMessageDecoder(buffer, offset, position_ptr, Tensor.MessageHeader(buffer))
 end
 
-is_sbe_message(::Type{<:Tensor.TensorMessage}) = true
+Sbe.is_sbe_message(::Type{<:Tensor.TensorMessage}) = true
 
-function sbe_message_buffer(m::Tensor.TensorMessage)
+function Sbe.message_buffer(m::Tensor.TensorMessage)
     offset = Tensor.sbe_offset(m) - Tensor.sbe_encoded_length(Tensor.MessageHeader)
     len = Tensor.sbe_decoded_length(m)
     offset < 0 && throw(ArgumentError("Message offset is negative"))
