@@ -12,10 +12,9 @@ is_sbe_message(::Type{<:Tensor.TensorMessage}) = true
 
 function sbe_message_buffer(m::Tensor.TensorMessage)
     offset = Tensor.sbe_offset(m) - Tensor.sbe_encoded_length(Tensor.MessageHeader)
-    Tensor.sbe_rewind!(m)
-    Tensor.skip!(m)
+    len = Tensor.sbe_decoded_length(m)
     offset < 0 && throw(ArgumentError("Message offset is negative"))
-    return view(Tensor.sbe_buffer(m), offset+1:Tensor.sbe_offset(m)+Tensor.sbe_encoded_length(m))
+    return view(Tensor.sbe_buffer(m), offset+1:Tensor.sbe_offset(m)+len)
 end
 
 function Base.eltype(T::Tensor.Format.SbeEnum)
