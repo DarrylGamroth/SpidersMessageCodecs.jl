@@ -18,10 +18,9 @@ Sbe.is_sbe_message(::Type{<:Event.EventMessage}) = true
 
 function Sbe.message_buffer(m::Event.EventMessage)
     offset = Event.sbe_offset(m) - Event.sbe_encoded_length(Event.MessageHeader)
-    Event.sbe_rewind!(m)
-    Event.skip!(m)
+    len = Event.sbe_decoded_length(m)
     offset < 0 && throw(ArgumentError("Message offset is negative"))
-    return view(Event.sbe_buffer(m), offset+1:Event.sbe_offset(m)+Event.sbe_encoded_length(m))
+    return view(Event.sbe_buffer(m), offset+1:Event.sbe_offset(m)+len)
 end
 
 abstract type SbeType end
