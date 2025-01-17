@@ -9,8 +9,8 @@ struct EventMessageDecoder{T<:AbstractArray{UInt8}} <: EventMessage{T}
     position_ptr::Base.RefValue{Int64}
     acting_block_length::UInt16
     acting_version::UInt16
-    function EventMessageDecoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64},
-        acting_block_length::UInt16, acting_version::UInt16) where {T}
+    function EventMessageDecoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64},
+        acting_block_length::Integer, acting_version::Integer) where {T}
         position_ptr[] = offset + acting_block_length
         new{T}(buffer, offset, position_ptr, acting_block_length, acting_version)
     end
@@ -20,13 +20,13 @@ struct EventMessageEncoder{T<:AbstractArray{UInt8}} <: EventMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    function EventMessageEncoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64}) where {T}
+    function EventMessageEncoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64}) where {T}
         position_ptr[] = offset + 100
         new{T}(buffer, offset, position_ptr)
     end
 end
 
-function EventMessageDecoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+function EventMessageDecoder(buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue{Int64},
     hdr::MessageHeader)
     if templateId(hdr) != UInt16(0x1) || schemaId(hdr) != UInt16(0x6)
         error("Template id or schema id mismatch")
@@ -38,18 +38,18 @@ function EventMessageDecoder(buffer::AbstractArray, position_ptr::Base.RefValue{
     hdr::MessageHeader)
     EventMessageDecoder(buffer, 0, position_ptr, hdr)
 end
-function EventMessageDecoder(buffer::AbstractArray, offset::Int,
-    acting_block_length::UInt16, acting_version::UInt16)
+function EventMessageDecoder(buffer::AbstractArray, offset::Int64,
+    acting_block_length::Integer, acting_version::Integer)
     EventMessageDecoder(buffer, offset, Ref(0), acting_block_length, acting_version)
 end
-function EventMessageDecoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+function EventMessageDecoder(buffer::AbstractArray, offset::Int64, hdr::MessageHeader)
     EventMessageDecoder(buffer, offset, Ref(0), hdr)
 end
 EventMessageDecoder(buffer::AbstractArray, hdr::MessageHeader) = EventMessageDecoder(buffer, 0, Ref(0), hdr)
 function EventMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64})
     EventMessageEncoder(buffer, 0, position_ptr)
 end
-function EventMessageEncoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+function EventMessageEncoder(buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue{Int64},
     hdr::MessageHeader)
     blockLength!(hdr, UInt16(0x64))
     templateId!(hdr, UInt16(0x1))
@@ -60,13 +60,13 @@ end
 function EventMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64}, hdr::MessageHeader)
     EventMessageEncoder(buffer, 0, position_ptr, hdr)
 end
-function EventMessageEncoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+function EventMessageEncoder(buffer::AbstractArray, offset::Int64, hdr::MessageHeader)
     EventMessageEncoder(buffer, offset, Ref(0), hdr)
 end
 function EventMessageEncoder(buffer::AbstractArray, hdr::MessageHeader)
     EventMessageEncoder(buffer, 0, Ref(0), hdr)
 end
-EventMessageEncoder(buffer::AbstractArray, offset::Int=0) = EventMessageEncoder(buffer, offset, Ref(0))
+EventMessageEncoder(buffer::AbstractArray, offset::Int64=0) = EventMessageEncoder(buffer, offset, Ref(0))
 sbe_buffer(m::EventMessage) = m.buffer
 sbe_offset(m::EventMessage) = m.offset
 sbe_position_ptr(m::EventMessage) = m.position_ptr
@@ -86,8 +86,7 @@ sbe_acting_block_length(m::EventMessageDecoder) = m.acting_block_length
 sbe_acting_block_length(::EventMessageEncoder) = UInt16(0x64)
 sbe_acting_version(m::EventMessageDecoder) = m.acting_version
 sbe_acting_version(::EventMessageEncoder) = UInt16(0x0)
-sbe_rewind!(m::EventMessage) = sbe_position!(m, m.offset + m.acting_block_length)
-sbe_rewind!(m::EventMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x64))
+sbe_rewind!(m::EventMessage) = sbe_position!(m, m.offset + sbe_acting_block_length(m))
 sbe_encoded_length(m::EventMessage) = sbe_position(m) - m.offset
 @inline function sbe_decoded_length(m::EventMessage)
     skipper = EventMessageDecoder(sbe_buffer(m), sbe_offset(m),
@@ -228,7 +227,7 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-@inline function value!(m::EventMessageEncoder, len::Int)
+@inline function value!(m::EventMessageEncoder, len::Int64)
     value_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)

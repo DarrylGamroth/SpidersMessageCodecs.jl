@@ -9,8 +9,8 @@ struct SparseVectorMessageDecoder{T<:AbstractArray{UInt8}} <: SparseVectorMessag
     position_ptr::Base.RefValue{Int64}
     acting_block_length::UInt16
     acting_version::UInt16
-    function SparseVectorMessageDecoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64},
-        acting_block_length::UInt16, acting_version::UInt16) where {T}
+    function SparseVectorMessageDecoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64},
+        acting_block_length::Integer, acting_version::Integer) where {T}
         position_ptr[] = offset + acting_block_length
         new{T}(buffer, offset, position_ptr, acting_block_length, acting_version)
     end
@@ -20,13 +20,13 @@ struct SparseVectorMessageEncoder{T<:AbstractArray{UInt8}} <: SparseVectorMessag
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    function SparseVectorMessageEncoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64}) where {T}
+    function SparseVectorMessageEncoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64}) where {T}
         position_ptr[] = offset + 76
         new{T}(buffer, offset, position_ptr)
     end
 end
 
-function SparseVectorMessageDecoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+function SparseVectorMessageDecoder(buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue{Int64},
     hdr::MessageHeader)
     if templateId(hdr) != UInt16(0x3) || schemaId(hdr) != UInt16(0x1)
         error("Template id or schema id mismatch")
@@ -38,18 +38,18 @@ function SparseVectorMessageDecoder(buffer::AbstractArray, position_ptr::Base.Re
     hdr::MessageHeader)
     SparseVectorMessageDecoder(buffer, 0, position_ptr, hdr)
 end
-function SparseVectorMessageDecoder(buffer::AbstractArray, offset::Int,
-    acting_block_length::UInt16, acting_version::UInt16)
+function SparseVectorMessageDecoder(buffer::AbstractArray, offset::Int64,
+    acting_block_length::Integer, acting_version::Integer)
     SparseVectorMessageDecoder(buffer, offset, Ref(0), acting_block_length, acting_version)
 end
-function SparseVectorMessageDecoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+function SparseVectorMessageDecoder(buffer::AbstractArray, offset::Int64, hdr::MessageHeader)
     SparseVectorMessageDecoder(buffer, offset, Ref(0), hdr)
 end
 SparseVectorMessageDecoder(buffer::AbstractArray, hdr::MessageHeader) = SparseVectorMessageDecoder(buffer, 0, Ref(0), hdr)
 function SparseVectorMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64})
     SparseVectorMessageEncoder(buffer, 0, position_ptr)
 end
-function SparseVectorMessageEncoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+function SparseVectorMessageEncoder(buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue{Int64},
     hdr::MessageHeader)
     blockLength!(hdr, UInt16(0x4c))
     templateId!(hdr, UInt16(0x3))
@@ -60,13 +60,13 @@ end
 function SparseVectorMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64}, hdr::MessageHeader)
     SparseVectorMessageEncoder(buffer, 0, position_ptr, hdr)
 end
-function SparseVectorMessageEncoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+function SparseVectorMessageEncoder(buffer::AbstractArray, offset::Int64, hdr::MessageHeader)
     SparseVectorMessageEncoder(buffer, offset, Ref(0), hdr)
 end
 function SparseVectorMessageEncoder(buffer::AbstractArray, hdr::MessageHeader)
     SparseVectorMessageEncoder(buffer, 0, Ref(0), hdr)
 end
-SparseVectorMessageEncoder(buffer::AbstractArray, offset::Int=0) = SparseVectorMessageEncoder(buffer, offset, Ref(0))
+SparseVectorMessageEncoder(buffer::AbstractArray, offset::Int64=0) = SparseVectorMessageEncoder(buffer, offset, Ref(0))
 sbe_buffer(m::SparseVectorMessage) = m.buffer
 sbe_offset(m::SparseVectorMessage) = m.offset
 sbe_position_ptr(m::SparseVectorMessage) = m.position_ptr
@@ -86,8 +86,7 @@ sbe_acting_block_length(m::SparseVectorMessageDecoder) = m.acting_block_length
 sbe_acting_block_length(::SparseVectorMessageEncoder) = UInt16(0x4c)
 sbe_acting_version(m::SparseVectorMessageDecoder) = m.acting_version
 sbe_acting_version(::SparseVectorMessageEncoder) = UInt16(0x0)
-sbe_rewind!(m::SparseVectorMessage) = sbe_position!(m, m.offset + m.acting_block_length)
-sbe_rewind!(m::SparseVectorMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x4c))
+sbe_rewind!(m::SparseVectorMessage) = sbe_position!(m, m.offset + sbe_acting_block_length(m))
 sbe_encoded_length(m::SparseVectorMessage) = sbe_position(m) - m.offset
 @inline function sbe_decoded_length(m::SparseVectorMessage)
     skipper = SparseVectorMessageDecoder(sbe_buffer(m), sbe_offset(m),
@@ -232,7 +231,7 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-@inline function indicies!(m::SparseVectorMessageEncoder, len::Int)
+@inline function indicies!(m::SparseVectorMessageEncoder, len::Int64)
     indicies_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -285,7 +284,7 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-@inline function values!(m::SparseVectorMessageEncoder, len::Int)
+@inline function values!(m::SparseVectorMessageEncoder, len::Int64)
     values_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)

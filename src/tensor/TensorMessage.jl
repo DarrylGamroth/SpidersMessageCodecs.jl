@@ -9,8 +9,8 @@ struct TensorMessageDecoder{T<:AbstractArray{UInt8}} <: TensorMessage{T}
     position_ptr::Base.RefValue{Int64}
     acting_block_length::UInt16
     acting_version::UInt16
-    function TensorMessageDecoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64},
-        acting_block_length::UInt16, acting_version::UInt16) where {T}
+    function TensorMessageDecoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64},
+        acting_block_length::Integer, acting_version::Integer) where {T}
         position_ptr[] = offset + acting_block_length
         new{T}(buffer, offset, position_ptr, acting_block_length, acting_version)
     end
@@ -20,13 +20,13 @@ struct TensorMessageEncoder{T<:AbstractArray{UInt8}} <: TensorMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    function TensorMessageEncoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64}) where {T}
+    function TensorMessageEncoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64}) where {T}
         position_ptr[] = offset + 68
         new{T}(buffer, offset, position_ptr)
     end
 end
 
-function TensorMessageDecoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+function TensorMessageDecoder(buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue{Int64},
     hdr::MessageHeader)
     if templateId(hdr) != UInt16(0x1) || schemaId(hdr) != UInt16(0x1)
         error("Template id or schema id mismatch")
@@ -38,18 +38,18 @@ function TensorMessageDecoder(buffer::AbstractArray, position_ptr::Base.RefValue
     hdr::MessageHeader)
     TensorMessageDecoder(buffer, 0, position_ptr, hdr)
 end
-function TensorMessageDecoder(buffer::AbstractArray, offset::Int,
-    acting_block_length::UInt16, acting_version::UInt16)
+function TensorMessageDecoder(buffer::AbstractArray, offset::Int64,
+    acting_block_length::Integer, acting_version::Integer)
     TensorMessageDecoder(buffer, offset, Ref(0), acting_block_length, acting_version)
 end
-function TensorMessageDecoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+function TensorMessageDecoder(buffer::AbstractArray, offset::Int64, hdr::MessageHeader)
     TensorMessageDecoder(buffer, offset, Ref(0), hdr)
 end
 TensorMessageDecoder(buffer::AbstractArray, hdr::MessageHeader) = TensorMessageDecoder(buffer, 0, Ref(0), hdr)
 function TensorMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64})
     TensorMessageEncoder(buffer, 0, position_ptr)
 end
-function TensorMessageEncoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+function TensorMessageEncoder(buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue{Int64},
     hdr::MessageHeader)
     blockLength!(hdr, UInt16(0x44))
     templateId!(hdr, UInt16(0x1))
@@ -60,13 +60,13 @@ end
 function TensorMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64}, hdr::MessageHeader)
     TensorMessageEncoder(buffer, 0, position_ptr, hdr)
 end
-function TensorMessageEncoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+function TensorMessageEncoder(buffer::AbstractArray, offset::Int64, hdr::MessageHeader)
     TensorMessageEncoder(buffer, offset, Ref(0), hdr)
 end
 function TensorMessageEncoder(buffer::AbstractArray, hdr::MessageHeader)
     TensorMessageEncoder(buffer, 0, Ref(0), hdr)
 end
-TensorMessageEncoder(buffer::AbstractArray, offset::Int=0) = TensorMessageEncoder(buffer, offset, Ref(0))
+TensorMessageEncoder(buffer::AbstractArray, offset::Int64=0) = TensorMessageEncoder(buffer, offset, Ref(0))
 sbe_buffer(m::TensorMessage) = m.buffer
 sbe_offset(m::TensorMessage) = m.offset
 sbe_position_ptr(m::TensorMessage) = m.position_ptr
@@ -86,8 +86,7 @@ sbe_acting_block_length(m::TensorMessageDecoder) = m.acting_block_length
 sbe_acting_block_length(::TensorMessageEncoder) = UInt16(0x44)
 sbe_acting_version(m::TensorMessageDecoder) = m.acting_version
 sbe_acting_version(::TensorMessageEncoder) = UInt16(0x0)
-sbe_rewind!(m::TensorMessage) = sbe_position!(m, m.offset + m.acting_block_length)
-sbe_rewind!(m::TensorMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x44))
+sbe_rewind!(m::TensorMessage) = sbe_position!(m, m.offset + sbe_acting_block_length(m))
 sbe_encoded_length(m::TensorMessage) = sbe_position(m) - m.offset
 @inline function sbe_decoded_length(m::TensorMessage)
     skipper = TensorMessageDecoder(sbe_buffer(m), sbe_offset(m),
@@ -210,7 +209,7 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-@inline function dims!(m::TensorMessageEncoder, len::Int)
+@inline function dims!(m::TensorMessageEncoder, len::Int64)
     dims_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -264,7 +263,7 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-@inline function offset!(m::TensorMessageEncoder, len::Int)
+@inline function offset!(m::TensorMessageEncoder, len::Int64)
     offset_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -317,7 +316,7 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-@inline function values!(m::TensorMessageEncoder, len::Int)
+@inline function values!(m::TensorMessageEncoder, len::Int64)
     values_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)

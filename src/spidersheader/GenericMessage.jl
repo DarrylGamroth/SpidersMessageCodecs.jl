@@ -9,8 +9,8 @@ struct GenericMessageDecoder{T<:AbstractArray{UInt8}} <: GenericMessage{T}
     position_ptr::Base.RefValue{Int64}
     acting_block_length::UInt16
     acting_version::UInt16
-    function GenericMessageDecoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64},
-        acting_block_length::UInt16, acting_version::UInt16) where {T}
+    function GenericMessageDecoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64},
+        acting_block_length::Integer, acting_version::Integer) where {T}
         position_ptr[] = offset + acting_block_length
         new{T}(buffer, offset, position_ptr, acting_block_length, acting_version)
     end
@@ -20,13 +20,13 @@ struct GenericMessageEncoder{T<:AbstractArray{UInt8}} <: GenericMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    function GenericMessageEncoder(buffer::T, offset::Int, position_ptr::Base.RefValue{Int64}) where {T}
+    function GenericMessageEncoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64}) where {T}
         position_ptr[] = offset + 64
         new{T}(buffer, offset, position_ptr)
     end
 end
 
-function GenericMessageDecoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+function GenericMessageDecoder(buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue{Int64},
     hdr::MessageHeader)
     if templateId(hdr) != UInt16(0x7) || schemaId(hdr) != UInt16(0x9)
         error("Template id or schema id mismatch")
@@ -38,18 +38,18 @@ function GenericMessageDecoder(buffer::AbstractArray, position_ptr::Base.RefValu
     hdr::MessageHeader)
     GenericMessageDecoder(buffer, 0, position_ptr, hdr)
 end
-function GenericMessageDecoder(buffer::AbstractArray, offset::Int,
-    acting_block_length::UInt16, acting_version::UInt16)
+function GenericMessageDecoder(buffer::AbstractArray, offset::Int64,
+    acting_block_length::Integer, acting_version::Integer)
     GenericMessageDecoder(buffer, offset, Ref(0), acting_block_length, acting_version)
 end
-function GenericMessageDecoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+function GenericMessageDecoder(buffer::AbstractArray, offset::Int64, hdr::MessageHeader)
     GenericMessageDecoder(buffer, offset, Ref(0), hdr)
 end
 GenericMessageDecoder(buffer::AbstractArray, hdr::MessageHeader) = GenericMessageDecoder(buffer, 0, Ref(0), hdr)
 function GenericMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64})
     GenericMessageEncoder(buffer, 0, position_ptr)
 end
-function GenericMessageEncoder(buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue{Int64},
+function GenericMessageEncoder(buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue{Int64},
     hdr::MessageHeader)
     blockLength!(hdr, UInt16(0x40))
     templateId!(hdr, UInt16(0x7))
@@ -60,13 +60,13 @@ end
 function GenericMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64}, hdr::MessageHeader)
     GenericMessageEncoder(buffer, 0, position_ptr, hdr)
 end
-function GenericMessageEncoder(buffer::AbstractArray, offset::Int, hdr::MessageHeader)
+function GenericMessageEncoder(buffer::AbstractArray, offset::Int64, hdr::MessageHeader)
     GenericMessageEncoder(buffer, offset, Ref(0), hdr)
 end
 function GenericMessageEncoder(buffer::AbstractArray, hdr::MessageHeader)
     GenericMessageEncoder(buffer, 0, Ref(0), hdr)
 end
-GenericMessageEncoder(buffer::AbstractArray, offset::Int=0) = GenericMessageEncoder(buffer, offset, Ref(0))
+GenericMessageEncoder(buffer::AbstractArray, offset::Int64=0) = GenericMessageEncoder(buffer, offset, Ref(0))
 sbe_buffer(m::GenericMessage) = m.buffer
 sbe_offset(m::GenericMessage) = m.offset
 sbe_position_ptr(m::GenericMessage) = m.position_ptr
@@ -86,8 +86,7 @@ sbe_acting_block_length(m::GenericMessageDecoder) = m.acting_block_length
 sbe_acting_block_length(::GenericMessageEncoder) = UInt16(0x40)
 sbe_acting_version(m::GenericMessageDecoder) = m.acting_version
 sbe_acting_version(::GenericMessageEncoder) = UInt16(0x0)
-sbe_rewind!(m::GenericMessage) = sbe_position!(m, m.offset + m.acting_block_length)
-sbe_rewind!(m::GenericMessageEncoder) = sbe_position!(m, m.offset + UInt16(0x40))
+sbe_rewind!(m::GenericMessage) = sbe_position!(m, m.offset + sbe_acting_block_length(m))
 sbe_encoded_length(m::GenericMessage) = sbe_position(m) - m.offset
 @inline function sbe_decoded_length(m::GenericMessage)
     skipper = GenericMessageDecoder(sbe_buffer(m), sbe_offset(m),
