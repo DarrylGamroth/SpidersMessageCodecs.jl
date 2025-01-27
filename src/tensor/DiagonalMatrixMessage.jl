@@ -26,7 +26,7 @@ struct DiagonalMatrixMessageEncoder{T<:AbstractArray{UInt8}} <: DiagonalMatrixMe
     end
 end
 
-function DiagonalMatrixMessageDecoder(buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue{Int64},
+@inline function DiagonalMatrixMessageDecoder(buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue{Int64},
     hdr::MessageHeader)
     if templateId(hdr) != UInt16(0x4) || schemaId(hdr) != UInt16(0x1)
         error("Template id or schema id mismatch")
@@ -34,22 +34,22 @@ function DiagonalMatrixMessageDecoder(buffer::AbstractArray, offset::Int64, posi
     DiagonalMatrixMessageDecoder(buffer, offset + sbe_encoded_length(hdr), position_ptr,
         blockLength(hdr), version(hdr))
 end
-function DiagonalMatrixMessageDecoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64},
+@inline function DiagonalMatrixMessageDecoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64},
     hdr::MessageHeader)
     DiagonalMatrixMessageDecoder(buffer, 0, position_ptr, hdr)
 end
-function DiagonalMatrixMessageDecoder(buffer::AbstractArray, offset::Int64,
+@inline function DiagonalMatrixMessageDecoder(buffer::AbstractArray, offset::Int64,
     acting_block_length::Integer, acting_version::Integer)
     DiagonalMatrixMessageDecoder(buffer, offset, Ref(0), acting_block_length, acting_version)
 end
-function DiagonalMatrixMessageDecoder(buffer::AbstractArray, offset::Int64, hdr::MessageHeader)
+@inline function DiagonalMatrixMessageDecoder(buffer::AbstractArray, offset::Int64, hdr::MessageHeader)
     DiagonalMatrixMessageDecoder(buffer, offset, Ref(0), hdr)
 end
-DiagonalMatrixMessageDecoder(buffer::AbstractArray, hdr::MessageHeader) = DiagonalMatrixMessageDecoder(buffer, 0, Ref(0), hdr)
-function DiagonalMatrixMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64})
+@inline DiagonalMatrixMessageDecoder(buffer::AbstractArray, hdr::MessageHeader) = DiagonalMatrixMessageDecoder(buffer, 0, Ref(0), hdr)
+@inline function DiagonalMatrixMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64})
     DiagonalMatrixMessageEncoder(buffer, 0, position_ptr)
 end
-function DiagonalMatrixMessageEncoder(buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue{Int64},
+@inline function DiagonalMatrixMessageEncoder(buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue{Int64},
     hdr::MessageHeader)
     blockLength!(hdr, UInt16(0x44))
     templateId!(hdr, UInt16(0x4))
@@ -57,16 +57,16 @@ function DiagonalMatrixMessageEncoder(buffer::AbstractArray, offset::Int64, posi
     version!(hdr, UInt16(0x0))
     DiagonalMatrixMessageEncoder(buffer, offset + sbe_encoded_length(hdr), position_ptr)
 end
-function DiagonalMatrixMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64}, hdr::MessageHeader)
+@inline function DiagonalMatrixMessageEncoder(buffer::AbstractArray, position_ptr::Base.RefValue{Int64},    hdr::MessageHeader)
     DiagonalMatrixMessageEncoder(buffer, 0, position_ptr, hdr)
 end
-function DiagonalMatrixMessageEncoder(buffer::AbstractArray, offset::Int64, hdr::MessageHeader)
+@inline function DiagonalMatrixMessageEncoder(buffer::AbstractArray, offset::Int64, hdr::MessageHeader)
     DiagonalMatrixMessageEncoder(buffer, offset, Ref(0), hdr)
 end
-function DiagonalMatrixMessageEncoder(buffer::AbstractArray, hdr::MessageHeader)
+@inline function DiagonalMatrixMessageEncoder(buffer::AbstractArray, hdr::MessageHeader)
     DiagonalMatrixMessageEncoder(buffer, 0, Ref(0), hdr)
 end
-DiagonalMatrixMessageEncoder(buffer::AbstractArray, offset::Int64=0) = DiagonalMatrixMessageEncoder(buffer, offset, Ref(0))
+@inline DiagonalMatrixMessageEncoder(buffer::AbstractArray, offset::Int64=0) = DiagonalMatrixMessageEncoder(buffer, offset, Ref(0))
 sbe_buffer(m::DiagonalMatrixMessage) = m.buffer
 sbe_offset(m::DiagonalMatrixMessage) = m.offset
 sbe_position_ptr(m::DiagonalMatrixMessage) = m.position_ptr
@@ -91,8 +91,7 @@ sbe_encoded_length(m::DiagonalMatrixMessage) = sbe_position(m) - m.offset
 @inline function sbe_decoded_length(m::DiagonalMatrixMessage)
     skipper = DiagonalMatrixMessageDecoder(sbe_buffer(m), sbe_offset(m),
         sbe_acting_block_length(m), sbe_acting_version(m))
-    sbe_rewind!(skipper)
-    skip!(skipper)
+    sbe_skip!(skipper)
     sbe_encoded_length(skipper)
 end
 
@@ -197,8 +196,8 @@ end
 
 @inline function skip_dims!(m::DiagonalMatrixMessage)
     len = dims_length(m)
-    pos = sbe_position(m) + len + 4
-    sbe_position!(m, pos)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
     return len
 end
 
@@ -250,8 +249,8 @@ end
 
 @inline function skip_values!(m::DiagonalMatrixMessage)
     len = values_length(m)
-    pos = sbe_position(m) + len + 4
-    sbe_position!(m, pos)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
     return len
 end
 
@@ -314,7 +313,8 @@ function show(io::IO, m::DiagonalMatrixMessage{T}) where {T}
     nothing
 end
 
-@inline function skip!(m::DiagonalMatrixMessage)
+@inline function sbe_skip!(m::DiagonalMatrixMessage)
+    sbe_rewind!(m)
     skip_dims!(m)
     skip_values!(m)
     return

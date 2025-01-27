@@ -1,27 +1,23 @@
 module SpidersMessageCodecs
 
 using UnsafeArrays
-using ValSplit
 
-include("spidersheader/Spidersheader.jl")
+include("sbe/sbe.jl")
+
+using .Sbe
+export Sbe
+
 include("event/Event.jl")
-include("tensor/Tensor.jl")
-
-include("sbe.jl")
-
-include("utils.jl")
-
-using .Spidersheader
-export Spidersheader
 
 using .Event
 export Event
 
+include("tensor/Tensor.jl")
+
 using .Tensor
 export Tensor
 
-using .Sbe
-export Sbe
+include("utils.jl")
 
 include("../ext/EventEx.jl")
 using .EventEx

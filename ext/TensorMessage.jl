@@ -4,13 +4,13 @@ function Sbe.message_type(
     Tensor.TensorMessage
 end
 
-function Sbe.decoder(::Type{T}, buffer::AbstractArray, offset::Int, position_ptr::Base.RefValue) where {T<:Tensor.TensorMessage}
-    Tensor.TensorMessageDecoder(buffer, offset, position_ptr, Tensor.MessageHeader(buffer))
+function Sbe.decoder(::Type{<:Tensor.TensorMessage}, buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue)
+    Tensor.TensorMessageDecoder(buffer, offset, position_ptr, Tensor.MessageHeader(buffer, offset))
 end
 
 Sbe.is_sbe_message(::Type{<:Tensor.TensorMessage}) = true
 
-function Sbe.message_buffer(m::Tensor.TensorMessage)
+function Base.convert(::Type{<:AbstractArray{UInt8}}, m::Tensor.TensorMessage)
     offset = Tensor.sbe_offset(m) - Tensor.sbe_encoded_length(Tensor.MessageHeader)
     len = Tensor.sbe_decoded_length(m)
     offset < 0 && throw(ArgumentError("Message offset is negative"))
@@ -32,18 +32,18 @@ function Base.eltype(T::Tensor.Format.SbeEnum)
     throw(ArgumentError("unexpected format"))
 end
 
-function tensor_format(T::Type{<:Real})
-    T <: UInt8 ? Tensor.Format.UINT8 :
-    T <: Int8 ? Tensor.Format.INT8 :
-    T <: UInt16 ? Tensor.Format.UINT16 :
-    T <: Int16 ? Tensor.Format.INT16 :
-    T <: UInt32 ? Tensor.Format.UINT32 :
-    T <: Int32 ? Tensor.Format.INT32 :
-    T <: UInt64 ? Tensor.Format.UINT64 :
-    T <: Int64 ? Tensor.Format.INT64 :
-    T <: Float32 ? Tensor.Format.FLOAT32 :
-    T <: Float64 ? Tensor.Format.FLOAT64 :
-    T <: Bool ? Tensor.Format.BOOLEAN :
+function Base.convert(::Type{Tensor.Format.SbeEnum}, T::Type{<:Real})
+    T === UInt8 ? Tensor.Format.UINT8 :
+    T === Int8 ? Tensor.Format.INT8 :
+    T === UInt16 ? Tensor.Format.UINT16 :
+    T === Int16 ? Tensor.Format.INT16 :
+    T === UInt32 ? Tensor.Format.UINT32 :
+    T === Int32 ? Tensor.Format.INT32 :
+    T === UInt64 ? Tensor.Format.UINT64 :
+    T === Int64 ? Tensor.Format.INT64 :
+    T === Float32 ? Tensor.Format.FLOAT32 :
+    T === Float64 ? Tensor.Format.FLOAT64 :
+    T === Bool ? Tensor.Format.BOOLEAN :
     throw(ArgumentError("unexpected type"))
 end
 
@@ -60,12 +60,12 @@ abstract type AbstractTensorMessageArray{T,N,O} end
 
     Tensor.sbe_rewind!(m)
 
-    let type = Base.eltype(Tensor.format(m))
-        T <: type || error("Unexpected data type, expected $T but got $type")
-    end
+    # FIXME these checks slow down the code
+    # type = Base.eltype(Tensor.format(m))
+    # T <: type || error("Unexpected data type, expected $T but got $type")
 
-    order = Tensor.order(m)
-    O == order || error("Unexpected order, expected $O but got $order")
+    # order = Tensor.order(m)
+    # O == order || error("Unexpected order, expected $O but got $order")
 
     dims = Tensor.dims(NTuple{N}, m)
     Tensor.skip_offset!(m)
@@ -83,7 +83,7 @@ end
 
     Tensor.sbe_rewind!(m)
 
-    Tensor.format!(m, tensor_format(T))
+    Tensor.format!(m, convert(Tensor.Format.SbeEnum, T))
     Tensor.order!(m, O)
 
     Tensor.dims!(m, dims)
@@ -103,26 +103,26 @@ end
     values!(t, m, size(src); offset) .= src
 end
 
-@inline Tensor.dims(T::Type{<:Real}, m::Tensor.TensorMessageDecoder) = reinterpret(T, Tensor.dims(m))
+@inline Tensor.dims(::Type{T}, m::Tensor.TensorMessageDecoder) where {T<:Real} = reinterpret(T, Tensor.dims(m))
 @inline Tensor.dims(::Type{NTuple}, m::Tensor.TensorMessageDecoder) = Tuple(Tensor.dims(Int32, m))
 @inline function Tensor.dims(::Type{NTuple{N}}, m::Tensor.TensorMessageDecoder) where {N}
     dims = Tensor.dims(Int32, m)
     ntuple(i -> dims[i], Val(N))
 end
-@inline Tensor.dims!(T::Type{<:Real}, m::Tensor.TensorMessageEncoder, len::Int) = reinterpret(T, Tensor.dims!(m, sizeof(T) * len))
+@inline Tensor.dims!(::Type{T}, m::Tensor.TensorMessageEncoder, len::Int) where {T<:Real} = reinterpret(T, Tensor.dims!(m, sizeof(T) * len))
 @inline Tensor.dims!(m::Tensor.TensorMessageEncoder, dims::NTuple{N,Int}) where {N} = Tensor.dims!(Int32, m, length(dims)) .= dims
 
-@inline Tensor.offset(T::Type{<:Real}, m::Tensor.TensorMessageDecoder) = reinterpret(T, Tensor.offset(m))
+@inline Tensor.offset(::Type{T}, m::Tensor.TensorMessageDecoder) where {T<:Real} = reinterpret(T, Tensor.offset(m))
 @inline Tensor.offset(::Type{NTuple}, m::Tensor.TensorMessageDecoder) = Tuple(Tensor.offset(Int32, m))
 @inline function Tensor.offset(::Type{NTuple{N}}, m::Tensor.TensorMessageDecoder) where {N}
     offset = Tensor.offset(Int32, m)
     ntuple(i -> offset[i], Val(N))
 end
-@inline Tensor.offset!(T::Type{<:Real}, m::Tensor.TensorMessageEncoder, len::Int) = reinterpret(T, Tensor.offset!(m, sizeof(T) * len))
+@inline Tensor.offset!(::Type{T}, m::Tensor.TensorMessageEncoder, len::Int) where {T<:Real} = reinterpret(T, Tensor.offset!(m, sizeof(T) * len))
 @inline Tensor.offset!(m::Tensor.TensorMessageEncoder, offset::NTuple{N,Int}) where {N} = Tensor.offset!(Int32, m, length(offset)) .= offset
 
-@inline Tensor.values(T::Type{<:Real}, m::Tensor.TensorMessageDecoder) = reinterpret(T, Tensor.values(m))
-@inline Tensor.values!(T::Type{<:Real}, m::Tensor.TensorMessageEncoder, len) = reinterpret(T, Tensor.values!(m, sizeof(T) * len))
+@inline Tensor.values(::Type{T}, m::Tensor.TensorMessageDecoder) where {T<:Real} = reinterpret(T, Tensor.values(m))
+@inline Tensor.values!(::Type{T}, m::Tensor.TensorMessageEncoder, len) where {T<:Real} = reinterpret(T, Tensor.values!(m, sizeof(T) * len))
 
 @inline function (m::Tensor.TensorMessageDecoder)()
     Tensor.sbe_rewind!(m)
@@ -177,6 +177,4 @@ function Base.show(io::IO, m::Tensor.TensorMessage{T}) where {T}
     print(io, "values: ")
     print(io, Tensor.skip_values!(writer))
     print(io, " bytes of raw data")
-
-    nothing
 end
