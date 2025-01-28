@@ -189,6 +189,12 @@ end
     copyto!(mappedarray(ltoh, htol, reinterpret(UInt8, view(m.buffer, m.offset+68+1:m.offset+68+sizeof(UInt8)*32))), value)
 end
 
+@inline function key!(::Type{<:AbstractString}, m::EventMessageEncoder, value::AbstractString)
+    dest = view(m.buffer, m.offset+1+68:m.offset+68+sizeof(UInt8)*32)
+    fill!(dest, 0)
+    copyto!(dest, value)
+end
+
 function value_meta_attribute(::EventMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")

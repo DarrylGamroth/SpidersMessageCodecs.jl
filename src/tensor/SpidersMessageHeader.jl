@@ -130,6 +130,12 @@ end
     copyto!(mappedarray(ltoh, htol, reinterpret(UInt8, view(m.buffer, m.offset+32+1:m.offset+32+sizeof(UInt8)*32))), value)
 end
 
+@inline function tag!(::Type{<:AbstractString}, m::SpidersMessageHeaderEncoder, value::AbstractString)
+    dest = view(m.buffer, m.offset+1+32:m.offset+32+sizeof(UInt8)*32)
+    fill!(dest, 0)
+    copyto!(dest, value)
+end
+
 function show(io::IO, writer::SpidersMessageHeader{T}) where {T}
     println(io, "SpidersMessageHeader view over a type $T")
     print(io, "channelRcvTimestampNs: ")
