@@ -8,12 +8,16 @@ function Sbe.decoder(::Type{<:Tensor.TensorMessage}, buffer::AbstractArray, offs
     Tensor.TensorMessageDecoder(buffer, offset, position_ptr, Tensor.MessageHeader(buffer, offset))
 end
 
+function Sbe.sbe_decoded_length(m::Tensor.TensorMessage)
+    Tensor.sbe_decoded_length(m)
+end
+
 Sbe.is_sbe_message(::Type{<:Tensor.TensorMessage}) = true
 
 function Base.convert(::Type{<:AbstractArray{UInt8}}, m::Tensor.TensorMessage)
     offset = Tensor.sbe_offset(m) - Tensor.sbe_encoded_length(Tensor.MessageHeader)
-    len = Tensor.sbe_decoded_length(m)
     offset < 0 && throw(ArgumentError("Message offset is negative"))
+    len = Tensor.sbe_decoded_length(m)
     return view(Tensor.sbe_buffer(m), offset+1:Tensor.sbe_offset(m)+len)
 end
 

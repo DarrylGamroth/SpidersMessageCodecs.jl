@@ -16,12 +16,16 @@ function Sbe.decoder(::Type{<:Event.EventMessage}, buffer::AbstractArray, offset
     Event.EventMessageDecoder(buffer, offset, position_ptr, Event.MessageHeader(buffer, offset))
 end
 
+function Sbe.sbe_decoded_length(m::Event.EventMessage)
+    Event.sbe_decoded_length(m)
+end
+
 Sbe.is_sbe_message(::Type{<:Event.EventMessage}) = true
 
 function Base.convert(::Type{<:AbstractArray{UInt8}}, m::Event.EventMessage)
     offset = Event.sbe_offset(m) - Event.sbe_encoded_length(Event.MessageHeader)
-    len = Event.sbe_decoded_length(m)
     offset < 0 && throw(ArgumentError("Message offset is negative"))
+    len = Event.sbe_decoded_length(m)
     return view(Event.sbe_buffer(m), offset+1:Event.sbe_offset(m)+len)
 end
 

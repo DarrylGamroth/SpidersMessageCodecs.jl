@@ -17,9 +17,13 @@ function decoder(buffer::AbstractArray, offset::Int64, position_ptr::Base.RefVal
     decoder(T, buffer, offset, position_ptr)
 end
 
+function sbe_decoded_length end
+
+decoder(buffer::AbstractArray, offset::Int64) = decoder(buffer, offset, Ref(0))
 decoder(buffer::AbstractArray, position_ptr::Base.RefValue) = decoder(buffer, 0, position_ptr)
 decoder(buffer::AbstractArray) = decoder(buffer, Ref(0))
 decoder(::Type{T}, buffer::AbstractArray, offset::Int64, position_ptr::Base.RefValue) where {T} = nothing
+decoder(::Type{T}, buffer::AbstractArray, offset::Int64) where {T} = decoder(T, buffer, offset, Ref(0))
 decoder(::Type{T}, buffer::AbstractArray, position_ptr::Base.RefValue) where {T} = decoder(T, buffer, 0, position_ptr)
 decoder(::Type{T}, buffer::AbstractArray) where {T} = decoder(T, buffer, Ref(0))
 
