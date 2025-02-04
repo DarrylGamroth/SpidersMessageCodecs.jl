@@ -186,7 +186,7 @@ dims_header_length(::TensorMessage) = 4
 end
 
 @inline function dims_length!(m::TensorMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 1 + 4 + n)
+    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
         error("buffer too short for data length")
     elseif n > 1073741824
         error("data length too large for length type")
@@ -240,7 +240,7 @@ offset_header_length(::TensorMessage) = 4
 end
 
 @inline function offset_length!(m::TensorMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 1 + 4 + n)
+    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
         error("buffer too short for data length")
     elseif n > 1073741824
         error("data length too large for length type")
@@ -293,7 +293,7 @@ values_header_length(::TensorMessage) = 4
 end
 
 @inline function values_length!(m::TensorMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 1 + 4 + n)
+    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
         error("buffer too short for data length")
     elseif n > 1073741824
         error("data length too large for length type")

@@ -208,7 +208,7 @@ indicies_header_length(::SparseVectorMessage) = 4
 end
 
 @inline function indicies_length!(m::SparseVectorMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 1 + 4 + n)
+    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
         error("buffer too short for data length")
     elseif n > 1073741824
         error("data length too large for length type")
@@ -261,7 +261,7 @@ values_header_length(::SparseVectorMessage) = 4
 end
 
 @inline function values_length!(m::SparseVectorMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 1 + 4 + n)
+    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
         error("buffer too short for data length")
     elseif n > 1073741824
         error("data length too large for length type")
