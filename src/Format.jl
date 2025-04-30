@@ -16,6 +16,7 @@
     BOOLEAN = Int8(11)
     STRING = Int8(12)
     BYTES = Int8(13)
-    SBE = Int8(14)
+    BIT = Int8(14)
+    SBE = Int8(15)
     NULL_VALUE = Int8(-128)
 end

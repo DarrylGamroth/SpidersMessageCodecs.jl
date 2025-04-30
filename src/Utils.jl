@@ -17,7 +17,7 @@ end
     @inbounds ntoh(reinterpret(T, view(buffer, offset+1:offset+sizeof(T)))[])
 end
 
-@inline function rstrip_nul(a::AbstractVector{UInt8})
+@inline function rstrip_nul(a::Union{AbstractString,AbstractArray})
     pos = findfirst(iszero, a)
     len = pos !== nothing ? pos - 1 : Base.length(a)
     return view(a, 1:len)

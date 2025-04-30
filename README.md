@@ -1,19 +1,20 @@
 # SpidersMessageCodec
 
 ```julia
+julia> using SpidersMessageCodecs
 julia> buf = zeros(UInt8, 10000);
 julia> data = rand(Int16, 5, 8);
 
 # Instantiate encoder
-julia> enc = Tensor.TensorMessageEncoder(buf, Tensor.MessageHeader(buf));
+julia> enc = TensorMessageEncoder(buf);
 # Non-allocating encoder uses external position pointer
 julia> position_ptr = Ref{Int64}()
-julia> enc = Tensor.TensorMessageEncoder(buf, position_ptr, Tensor.MessageHeader(buf));
-# Instantiate decoder
-julia> dec = Tensor.TensorMessageDecoder(buf, Tensor.MessageHeader(buf));
+julia> enc = TensorMessageEncoder(buf; position_ptr=position_ptr);
+# Instantiate decoder with external position pointer
+julia> dec = TensorMessageDecoder(buf; position_ptr=position_ptr);
 
 # Tensor with offset (10, 0)
-julia> enc(data; offset=(10, 0))
+julia> encode(enc, data; offset=(10, 0))
 5×8 reshape(reinterpret(Int16, view(::Vector{UInt8}, 105:184)), 5, 8) with eltype Int16:
   -3114   12073  -27310   13451   23514    9311  -25151  10918
   27138  -27909  -17270   21362  -27810  -17819   24535    228
@@ -40,7 +41,7 @@ offset: (10, 0)
 values: 80 bytes of raw data
 
 # Adjoint
-julia> enc(data'; offset=(10, 0))
+julia> encode(enc, data'; offset=(10, 0))
 8×5 reshape(reinterpret(Int16, view(::Vector{UInt8}, 105:184)), 8, 5) with eltype Int16:
   -3114   27138   26611  -22652  -10071
   12073  -27909  -10223   31731   -8573
@@ -70,7 +71,7 @@ offset: (10, 0)
 values: 80 bytes of raw data
 
 # Type-unstable view into buffer 
-julia> dec()
+julia> decode(dec)
 5×8 reshape(reinterpret(Int16, view(::Vector{UInt8}, 105:184)), 5, 8) with eltype Int16:
   -3114   12073  -27310   13451   23514    9311  -25151  10918
   27138  -27909  -17270   21362  -27810  -17819   24535    228
@@ -79,7 +80,7 @@ julia> dec()
  -10071   -8573   -9952  -12523  -13172   17110  -28278   8771
 
 # Type-stable view into buffer
-julia> dec(Matrix{Int16})
+julia> decode(Matrix{Int16}, dec)
 5×8 reshape(reinterpret(Int16, view(::Vector{UInt8}, 105:184)), 5, 8) with eltype Int16:
   -3114   12073  -27310   13451   23514    9311  -25151  10918
   27138  -27909  -17270   21362  -27810  -17819   24535    228
@@ -95,14 +96,14 @@ julia> dec(Matrix{Int16})
 julia> write("tmp.dat", buf)
 
 julia> buf2 = read("tmp.dat")
-julia> dec = Tensor.TensorMessageDecoder(buf2, Tensor.MessageHeader(buf))
-julia> Tensor.skip_dims!(dec)
+julia> dec = TensorMessageDecoder(buf2)
+julia> skip_dims!(dec)
 # Type-stable offset
-julia> offset2 = Tensor.offset(NTuple{2}, dec)
+julia> offset2 = offset(NTuple{2}, dec)
 (5, 8)
 
 # Type-stable img
-julia> img2 = dec(Matrix{Int16})
+julia> img2 = decode(Matrix{Int16}, dec)
 5×8 reshape(reinterpret(Int16, view(::Vector{UInt8}, 105:184)), 5, 8) with eltype Int16:
   -3114   12073  -27310   13451   23514    9311  -25151  10918
   27138  -27909  -17270   21362  -27810  -17819   24535    228

@@ -1,0 +1,334 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sbe:messageSchema xmlns:sbe="http://fixprotocol.io/2016/sbe"
+    xmlns:xi="http://www.w3.org/2001/XInclude"
+    package="SpidersMessageCodecs"
+    id="1"
+    version="0"
+    semanticVersion=""
+    description="Schema for SPIDERS messages"
+    byteOrder="littleEndian">
+    <types>
+        <composite name="messageHeader"
+            description="Message identifiers and length of message root">
+            <type name="blockLength" primitiveType="uint16" />
+            <type name="templateId" primitiveType="uint16" />
+            <type name="schemaId" primitiveType="uint16" />
+            <type name="version" primitiveType="uint16" />
+        </composite>
+        <composite name="groupSizeEncoding" description="Repeating group dimensions">
+            <type name="blockLength" primitiveType="uint16" />
+            <type name="numInGroup" primitiveType="uint16" />
+        </composite>
+        <composite name="varStringEncoding" description="Variable length UTF-8 String">
+            <type name="length" primitiveType="uint32" maxValue="1073741824" />
+            <type name="varData" primitiveType="uint8" length="0" characterEncoding="UTF-8" />
+        </composite>
+        <composite name="varAsciiEncoding" description="Variable length ASCII String">
+            <type name="length" primitiveType="uint32" maxValue="1073741824" />
+            <type name="varData" primitiveType="uint8" length="0" characterEncoding="ASCII" />
+        </composite>
+        <composite name="varDataEncoding" description="Variable length binary blob">
+            <type name="length" primitiveType="uint32" maxValue="1073741824" />
+            <type name="varData" primitiveType="uint8" length="0" />
+        </composite>
+
+        <composite name="SpidersMessageHeader" description="Common fields of SPIDERS messages">
+            <type name="channelRcvTimestampNs" primitiveType="int64"
+                description="Timestamp of received message (optionally inserted by UDP transport)" />
+            <type name="channelSndTimestampNs" primitiveType="int64"
+                description="Timestamp of message sent (optionally inserted by UDP transport)" />
+            <type name="TimestampNs" primitiveType="int64"
+                description="Message Timestamp" />
+            <type name="correlationId" primitiveType="int64"
+                description="Unique number to track message" />
+            <type name="tag" primitiveType="char" length="32"
+                description="Tag field to identify message" />
+        </composite>
+
+        <type name="Pad1" description="Pad 1 byte" primitiveType="int8" length="1" />
+        <type name="Pad2" description="Pad 2 bytes" primitiveType="int8" length="2" />
+        <type name="Pad3" description="Pad 3 bytes" primitiveType="int8" length="3" />
+        <type name="Pad4" description="Pad 4 bytes" primitiveType="int8" length="4" />
+        <type name="Int64Array2" description="Fixed length array (2) of int64" primitiveType="int64"
+            length="2" />
+        <type name="String32" description="Fixed length string (32)" primitiveType="char"
+            length="32" />
+
+        <enum name="Format" decscription="SPIDERS Data Format" encodingType="int8">
+            <validValue name="NOTHING">0</validValue>
+            <validValue name="UINT8">1</validValue>
+            <validValue name="INT8">2</validValue>
+            <validValue name="UINT16">3</validValue>
+            <validValue name="INT16">4</validValue>
+            <validValue name="UINT32">5</validValue>
+            <validValue name="INT32">6</validValue>
+            <validValue name="UINT64">7</validValue>
+            <validValue name="INT64">8</validValue>
+            <validValue name="FLOAT32">9</validValue>
+            <validValue name="FLOAT64">10</validValue>
+            <validValue name="BOOLEAN">11</validValue>
+            <validValue name="STRING">12</validValue>
+            <validValue name="BYTES">13</validValue>
+            <validValue name="BIT">14</validValue>
+            <validValue name="SBE">15</validValue>
+        </enum>
+
+        <enum name="MajorOrder" description="Direction of stored data" encodingType="int8">
+            <validValue name="ROW" description="Row-major ordering">0</validValue>
+            <validValue name="COLUMN" description="Column-major ordering">1</validValue>
+        </enum>
+        <enum name="Indexing"
+            description="Specifies whether the matrix indicies are 0 or 1-based"
+            encodingType="int8">
+            <validValue name="ZERO" description="Zero-based Indexing">0</validValue>
+            <validValue name="ONE" description="One-based Indexing">1</validValue>
+        </enum>
+    </types>
+
+    <sbe:message name="EventMessage"
+        id="1"
+        description="Event message format">
+        <field name="header"
+            id="1"
+            type="SpidersMessageHeader" />
+        <field name="format"
+            id="2"
+            description="Data format for value"
+            type="Format" />
+        <field name="reserved1"
+            id="3"
+            description="Reserved field"
+            type="Pad3" />
+        <field name="key"
+            id="10"
+            description="Key field for event"
+            type="String32" />
+        <data name="value"
+            id="20"
+            description="Byte buffer containing value"
+            type="varDataEncoding" />
+    </sbe:message>
+
+    <sbe:message name="TensorMessage"
+        id="10"
+        description="Tensor message format">
+        <field name="header"
+            id="1"
+            type="SpidersMessageHeader" />
+        <field name="format"
+            id="2"
+            description="Element data format"
+            type="Format" />
+        <field name="order"
+            id="3"
+            description="Ordering of data in tensor (column or row major)"
+            type="MajorOrder" />
+        <field name="reserved1"
+            id="4"
+            description="Reserved field"
+            type="Pad2" />
+        <data name="dims"
+            id="20"
+            description="Byte buffer array of int32 of size along each dimension"
+            semanticType="int32"
+            type="varDataEncoding" />
+        <data name="offset"
+            id="21"
+            description="Byte buffer array of int32 of offsets. Used for specifying a region-of-interest"
+            semanticType="int32"
+            type="varDataEncoding" />
+        <data name="values"
+            id="30"
+            description="Byte buffer containing value data"
+            type="varDataEncoding" />
+    </sbe:message>
+
+    <sbe:message name="SparseMatrixCSXMessage"
+        id="11"
+        description="Compressed sparse row/column matrix format message">
+        <field name="header"
+            id="1"
+            type="SpidersMessageHeader" />
+        <field name="format"
+            id="2"
+            description="Element data format"
+            type="Format" />
+        <field name="order"
+            id="3"
+            description="Ordering of data in matrix"
+            type="MajorOrder" />
+        <field name="indexing"
+            id="4"
+            description="Starting value for index arrays"
+            type="Indexing" />
+        <field name="reserved1"
+            id="5"
+            description="Reserved field"
+            type="Pad1" />
+        <field name="dims"
+            id="6"
+            description="Size along each dimension"
+            type="Int64Array2" />
+        <data name="indexPointer"
+            id="20"
+            description="Byte buffer array of int64 of indicies of first non-zero element in the major axis of stored values"
+            semanticType="int64"
+            type="varDataEncoding" />
+        <data name="indicies"
+            id="21"
+            description="Byte buffer array of int64 containing minor axis indicies"
+            semanticType="int64"
+            type="varDataEncoding" />
+        <data name="values"
+            id="30"
+            description="Byte buffer containing value data"
+            type="varDataEncoding" />
+    </sbe:message>
+
+    <sbe:message name="SparseVectorMessage"
+        id="12"
+        description="Sparse vector format message">
+        <field name="header"
+            id="1"
+            type="SpidersMessageHeader" />
+        <field name="format"
+            id="2"
+            description="Element data format"
+            type="Format" />
+        <field name="indiciesFormat"
+            id="3"
+            description="Indicies data format"
+            type="Format" />
+        <field name="indexing"
+            id="4"
+            description="Starting value for index arrays"
+            type="Indexing" />
+        <field name="reserved1"
+            id="5"
+            description="Reserved field"
+            type="Pad1" />
+        <field name="length"
+            id="6"
+            description="Array length"
+            type="int64" />
+        <data name="indicies"
+            id="20"
+            description="Byte buffer of int64 containing indicies of non-zero elements"
+            semanticType="int64"
+            type="varDataEncoding" />
+        <data name="values"
+            id="30"
+            description="Byte buffer containing value data"
+            type="varDataEncoding" />
+    </sbe:message>
+
+    <sbe:message name="DiagonalMatrixMessage"
+        id="13"
+        description="Diagonal matrix format message">
+        <field name="header"
+            id="1"
+            type="SpidersMessageHeader" />
+        <field name="format"
+            id="2"
+            description="Element data format"
+            type="Format" />
+        <field name="indiciesFormat"
+            id="3"
+            description="Indicies data format"
+            type="Format" />
+        <field name="reserved1"
+            id="10"
+            description="Reserved field"
+            type="Pad2" />
+        <data name="dims"
+            id="20"
+            description="Byte buffer of int64 containing size along each dimension"
+            semanticType="int64"
+            type="varDataEncoding" />
+        <data name="values"
+            id="30"
+            description="Byte buffer containing value data"
+            type="varDataEncoding" />
+    </sbe:message>
+
+    <sbe:message name="TensorFragmentHeaderMessage"
+        id="14"
+        description="Tensor fragment header message format">
+        <field name="header"
+            id="1"
+            type="SpidersMessageHeader" />
+        <field name="format"
+            id="2"
+            description="Element data format"
+            type="Format" />
+        <field name="order"
+            id="3"
+            description="Ordering of data in tensor (column or row major)"
+            type="MajorOrder" />
+        <field name="reserved1"
+            id="4"
+            description="Reserved field"
+            type="Pad2" />
+        <group name="group" id="23" dimensionType="groupSizeEncoding">
+            <field name="groupField1" id="11" type="int32" />
+        </group>
+        <data name="dims"
+            id="20"
+            description="Byte buffer array of int32 of size along each dimension"
+            semanticType="int32"
+            type="varDataEncoding" />
+        <data name="offset"
+            id="21"
+            description="Byte buffer array of int32 of offsets. Used for specifying a region-of-interest"
+            semanticType="int32"
+            type="varDataEncoding" />
+    </sbe:message>
+
+    <sbe:message name="TensorFragmentDataMessage"
+        id="15"
+        description="Tensor fragment data message format">
+        <field name="header"
+            id="1"
+            type="SpidersMessageHeader" />
+        <field name="offset"
+            id="2"
+            description="Offset in bytes of destination in assembled buffer"
+            type="int64" />
+        <data name="fragment"
+            id="10"
+            description="Byte buffer containing fragment data"
+            type="varDataEncoding" />
+    </sbe:message>
+
+    <sbe:message name="ChunkHeaderMessage"
+        id="30"
+        description="Chunk header message format">
+        <field name="header"
+            id="1"
+            type="SpidersMessageHeader" />
+        <field name="length"
+            id="2"
+            description="Length of data"
+            type="int64" />
+        <data name="metadata"
+            id="10"
+            description="Metadata"
+            type="varDataEncoding" />
+    </sbe:message>
+
+    <sbe:message name="ChunkDataMessage"
+        id="31"
+        description="Chunk data message format">
+        <field name="header"
+            id="1"
+            type="SpidersMessageHeader" />
+        <field name="offset"
+            id="2"
+            description="Offset in bytes of destination in assembled buffer"
+            type="int64" />
+        <data name="chunk"
+            id="10"
+            description="Byte buffer containing chunk data"
+            type="varDataEncoding" />
+    </sbe:message>
+</sbe:messageSchema>
