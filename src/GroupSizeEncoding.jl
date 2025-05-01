@@ -6,7 +6,7 @@ struct GroupSizeEncoding{T<:AbstractArray{UInt8}}
     buffer::T
     offset::Int64
     acting_version::UInt16
-    function GroupSizeEncoding(buffer::T, offset::Int64=0, acting_version::Integer=0) where {T}
+    function GroupSizeEncoding(buffer::T, offset::Integer=0, acting_version::Integer=0) where {T}
         new{T}(buffer, offset, acting_version)
     end
 end

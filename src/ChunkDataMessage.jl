@@ -10,7 +10,7 @@ struct ChunkDataMessageDecoder{T<:AbstractArray{UInt8}} <: ChunkDataMessage{T}
     position_ptr::Base.RefValue{Int64}
     acting_block_length::UInt16
     acting_version::UInt16
-    function ChunkDataMessageDecoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64},
+    function ChunkDataMessageDecoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
         acting_block_length::Integer, acting_version::Integer) where {T}
         position_ptr[] = offset + acting_block_length
         new{T}(buffer, offset, position_ptr, acting_block_length, acting_version)
@@ -21,13 +21,13 @@ struct ChunkDataMessageEncoder{T<:AbstractArray{UInt8}} <: ChunkDataMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    function ChunkDataMessageEncoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64}) where {T}
+    function ChunkDataMessageEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64}) where {T}
         position_ptr[] = offset + 72
         new{T}(buffer, offset, position_ptr)
     end
 end
 
-@inline function ChunkDataMessageDecoder(buffer::AbstractArray, offset::Int64=0;
+@inline function ChunkDataMessageDecoder(buffer::AbstractArray, offset::Integer=0;
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
     if templateId(header) != UInt16(0x1f) || schemaId(header) != UInt16(0x1)
@@ -36,7 +36,7 @@ end
     ChunkDataMessageDecoder(buffer, offset + sbe_encoded_length(header), position_ptr,
         blockLength(header), version(header))
 end
-@inline function ChunkDataMessageEncoder(buffer::AbstractArray, offset::Int64=0;
+@inline function ChunkDataMessageEncoder(buffer::AbstractArray, offset::Integer=0;
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
     blockLength!(header, UInt16(0x48))

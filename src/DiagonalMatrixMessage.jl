@@ -10,7 +10,7 @@ struct DiagonalMatrixMessageDecoder{T<:AbstractArray{UInt8}} <: DiagonalMatrixMe
     position_ptr::Base.RefValue{Int64}
     acting_block_length::UInt16
     acting_version::UInt16
-    function DiagonalMatrixMessageDecoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64},
+    function DiagonalMatrixMessageDecoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
         acting_block_length::Integer, acting_version::Integer) where {T}
         position_ptr[] = offset + acting_block_length
         new{T}(buffer, offset, position_ptr, acting_block_length, acting_version)
@@ -21,13 +21,13 @@ struct DiagonalMatrixMessageEncoder{T<:AbstractArray{UInt8}} <: DiagonalMatrixMe
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    function DiagonalMatrixMessageEncoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64}) where {T}
+    function DiagonalMatrixMessageEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64}) where {T}
         position_ptr[] = offset + 68
         new{T}(buffer, offset, position_ptr)
     end
 end
 
-@inline function DiagonalMatrixMessageDecoder(buffer::AbstractArray, offset::Int64=0;
+@inline function DiagonalMatrixMessageDecoder(buffer::AbstractArray, offset::Integer=0;
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
     if templateId(header) != UInt16(0xd) || schemaId(header) != UInt16(0x1)
@@ -36,7 +36,7 @@ end
     DiagonalMatrixMessageDecoder(buffer, offset + sbe_encoded_length(header), position_ptr,
         blockLength(header), version(header))
 end
-@inline function DiagonalMatrixMessageEncoder(buffer::AbstractArray, offset::Int64=0;
+@inline function DiagonalMatrixMessageEncoder(buffer::AbstractArray, offset::Integer=0;
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
     blockLength!(header, UInt16(0x44))

@@ -10,7 +10,7 @@ struct TensorFragmentHeaderMessageDecoder{T<:AbstractArray{UInt8}} <: TensorFrag
     position_ptr::Base.RefValue{Int64}
     acting_block_length::UInt16
     acting_version::UInt16
-    function TensorFragmentHeaderMessageDecoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64},
+    function TensorFragmentHeaderMessageDecoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
         acting_block_length::Integer, acting_version::Integer) where {T}
         position_ptr[] = offset + acting_block_length
         new{T}(buffer, offset, position_ptr, acting_block_length, acting_version)
@@ -21,13 +21,13 @@ struct TensorFragmentHeaderMessageEncoder{T<:AbstractArray{UInt8}} <: TensorFrag
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    function TensorFragmentHeaderMessageEncoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64}) where {T}
+    function TensorFragmentHeaderMessageEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64}) where {T}
         position_ptr[] = offset + 68
         new{T}(buffer, offset, position_ptr)
     end
 end
 
-@inline function TensorFragmentHeaderMessageDecoder(buffer::AbstractArray, offset::Int64=0;
+@inline function TensorFragmentHeaderMessageDecoder(buffer::AbstractArray, offset::Integer=0;
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
     if templateId(header) != UInt16(0xe) || schemaId(header) != UInt16(0x1)
@@ -36,7 +36,7 @@ end
     TensorFragmentHeaderMessageDecoder(buffer, offset + sbe_encoded_length(header), position_ptr,
         blockLength(header), version(header))
 end
-@inline function TensorFragmentHeaderMessageEncoder(buffer::AbstractArray, offset::Int64=0;
+@inline function TensorFragmentHeaderMessageEncoder(buffer::AbstractArray, offset::Integer=0;
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
     blockLength!(header, UInt16(0x44))
@@ -159,7 +159,7 @@ mutable struct GroupDecoder{T<:AbstractArray{UInt8}} <: Group{T}
     const acting_version::UInt16
     const count::UInt16
     index::UInt16
-    function GroupDecoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64},
+    function GroupDecoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
         block_length::Integer, acting_version::Integer,
         count::Integer, index::Integer) where {T}
         new{T}(buffer, offset, position_ptr, block_length, acting_version, count, index)
@@ -173,7 +173,7 @@ mutable struct GroupEncoder{T<:AbstractArray{UInt8}} <: Group{T}
     const initial_position::Int64
     const count::UInt16
     index::UInt16
-    function GroupEncoder(buffer::T, offset::Int64, position_ptr::Base.RefValue{Int64},
+    function GroupEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
         initial_position::Int64, count::Integer, index::Integer) where {T}
         new{T}(buffer, offset, position_ptr, initial_position, count, index)
     end
