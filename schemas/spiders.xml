@@ -271,10 +271,6 @@
             id="4"
             description="Ordering of data in tensor (column or row major)"
             type="MajorOrder" />
-        <field name="reserved1"
-            id="5"
-            description="Reserved field"
-            type="Pad2" />
         <group name="slice"
             id="11"
             dimensionType="groupSizeEncoding"
