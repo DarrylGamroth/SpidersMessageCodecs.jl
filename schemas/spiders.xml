@@ -132,12 +132,10 @@
         <data name="dims"
             id="20"
             description="Byte buffer array of int32 of size along each dimension"
-            semanticType="int32"
             type="varDataEncoding" />
         <data name="origin"
             id="21"
             description="Byte buffer array of int32 of origin. Used for specifying a region-of-interest"
-            semanticType="int32"
             type="varDataEncoding" />
         <data name="values"
             id="30"
@@ -174,12 +172,10 @@
         <data name="indexPointer"
             id="20"
             description="Byte buffer array of int64 of indicies of first non-zero element in the major axis of stored values"
-            semanticType="int64"
             type="varDataEncoding" />
         <data name="indicies"
             id="21"
             description="Byte buffer array of int64 containing minor axis indicies"
-            semanticType="int64"
             type="varDataEncoding" />
         <data name="values"
             id="30"
@@ -216,7 +212,6 @@
         <data name="indicies"
             id="20"
             description="Byte buffer of int64 containing indicies of non-zero elements"
-            semanticType="int64"
             type="varDataEncoding" />
         <data name="values"
             id="30"
@@ -245,7 +240,6 @@
         <data name="dims"
             id="20"
             description="Byte buffer of int64 containing size along each dimension"
-            semanticType="int64"
             type="varDataEncoding" />
         <data name="values"
             id="30"
@@ -304,7 +298,6 @@
         <data name="dims"
             id="10"
             description="Byte buffer array of int32 of size along each dimension."
-            semanticType="int32"
             type="varDataEncoding" />
     </sbe:message>
 
