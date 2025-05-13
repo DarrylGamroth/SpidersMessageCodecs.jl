@@ -22,7 +22,7 @@ struct TensorStreamHeaderMessageEncoder{T<:AbstractArray{UInt8}} <: TensorStream
     offset::Int64
     position_ptr::Base.RefValue{Int64}
     function TensorStreamHeaderMessageEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64}) where {T}
-        position_ptr[] = offset + 76
+        position_ptr[] = offset + 74
         new{T}(buffer, offset, position_ptr)
     end
 end
@@ -39,7 +39,7 @@ end
 @inline function TensorStreamHeaderMessageEncoder(buffer::AbstractArray, offset::Integer=0;
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
-    blockLength!(header, UInt16(0x4c))
+    blockLength!(header, UInt16(0x4a))
     templateId!(header, UInt16(0xe))
     schemaId!(header, UInt16(0x1))
     version!(header, UInt16(0x0))
@@ -50,8 +50,8 @@ sbe_offset(m::TensorStreamHeaderMessage) = m.offset
 sbe_position_ptr(m::TensorStreamHeaderMessage) = m.position_ptr
 sbe_position(m::TensorStreamHeaderMessage) = m.position_ptr[]
 sbe_position!(m::TensorStreamHeaderMessage, position) = m.position_ptr[] = position
-sbe_block_length(::TensorStreamHeaderMessage) = UInt16(0x4c)
-sbe_block_length(::Type{<:TensorStreamHeaderMessage}) = UInt16(0x4c)
+sbe_block_length(::TensorStreamHeaderMessage) = UInt16(0x4a)
+sbe_block_length(::Type{<:TensorStreamHeaderMessage}) = UInt16(0x4a)
 sbe_template_id(::TensorStreamHeaderMessage) = UInt16(0xe)
 sbe_template_id(::Type{<:TensorStreamHeaderMessage})  = UInt16(0xe)
 sbe_schema_id(::TensorStreamHeaderMessage) = UInt16(0x1)
@@ -61,7 +61,7 @@ sbe_schema_version(::Type{<:TensorStreamHeaderMessage})  = UInt16(0x0)
 sbe_semantic_type(::TensorStreamHeaderMessage) = ""
 sbe_semantic_version(::TensorStreamHeaderMessage) = ""
 sbe_acting_block_length(m::TensorStreamHeaderMessageDecoder) = m.acting_block_length
-sbe_acting_block_length(::TensorStreamHeaderMessageEncoder) = UInt16(0x4c)
+sbe_acting_block_length(::TensorStreamHeaderMessageEncoder) = UInt16(0x4a)
 sbe_acting_version(m::TensorStreamHeaderMessageDecoder) = m.acting_version
 sbe_acting_version(::TensorStreamHeaderMessageEncoder) = UInt16(0x0)
 sbe_rewind!(m::TensorStreamHeaderMessage) = sbe_position!(m, m.offset + sbe_acting_block_length(m))
@@ -134,37 +134,6 @@ end
     return MajorOrder.SbeEnum(decode_le(Int8, m.buffer, m.offset + 73))
 end
 @inline order!(m::TensorStreamHeaderMessageEncoder, value::MajorOrder.SbeEnum) = encode_le(Int8, m.buffer, m.offset + 73, Int8(value))
-
-function reserved1_meta_attribute(::TensorStreamHeaderMessage, meta_attribute)
-    meta_attribute === :presence && return Symbol("required")
-    return Symbol("")
-end
-reserved1_id(::TensorStreamHeaderMessage) = UInt16(0x5)
-reserved1_since_version(::TensorStreamHeaderMessage) = UInt16(0x0)
-reserved1_in_acting_version(m::TensorStreamHeaderMessage) = sbe_acting_version(m) >= UInt16(0x0)
-reserved1_encoding_offset(::TensorStreamHeaderMessage) = 74
-reserved1_null_value(::TensorStreamHeaderMessage) = Int8(-128)
-reserved1_min_value(::TensorStreamHeaderMessage) = Int8(-127)
-reserved1_max_value(::TensorStreamHeaderMessage) = Int8(127)
-reserved1_encoding_length(::TensorStreamHeaderMessage) = 2
-reserved1_length(::TensorStreamHeaderMessage) = 2
-reserved1_eltype(::TensorStreamHeaderMessage) = Int8
-
-@inline function reserved1(m::TensorStreamHeaderMessageDecoder)
-    return mappedarray(ltoh, reinterpret(Int8, view(m.buffer, m.offset+74+1:m.offset+74+sizeof(Int8)*2)))
-end
-
-@inline function reserved1(::Type{<:SVector},m::TensorStreamHeaderMessageDecoder)
-    return mappedarray(ltoh, reinterpret(SVector{2,Int8}, view(m.buffer, m.offset+74+1:m.offset+74+sizeof(Int8)*2))[])
-end
-
-@inline function reserved1!(m::TensorStreamHeaderMessageEncoder)
-    return mappedarray(ltoh, htol, reinterpret(Int8, view(m.buffer, m.offset+74+1:m.offset+74+sizeof(Int8)*2)))
-end
-
-@inline function reserved1!(m::TensorStreamHeaderMessageEncoder, value)
-    copyto!(reserved1!(m), value)
-end
 
 export Slice, SliceDecoder, SliceEncoder
 abstract type Slice{T} end
@@ -472,7 +441,6 @@ metadata_since_version(::TensorStreamHeaderMessage) = 0
 metadata_in_acting_version(m::TensorStreamHeaderMessage) = sbe_acting_version(m) >= 0
 
 function dims_meta_attribute(::TensorStreamHeaderMessage, meta_attribute)
-    meta_attribute === :semantic_type && return Symbol("int32")
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
@@ -571,10 +539,6 @@ function show(io::IO, m::TensorStreamHeaderMessage{T}) where {T}
     println(io)
     print(io, "order: ")
     print(io, order(writer))
-
-    println(io)
-    print(io, "reserved1: ")
-    print(io, reserved1(writer))
 
     println(io)
     println(io, "Slice:")

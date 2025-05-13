@@ -171,7 +171,6 @@ end
 @inline length!(m::SparseVectorMessageEncoder, value) = encode_le(Int64, m.buffer, m.offset + 68, value)
 
 function indicies_meta_attribute(::SparseVectorMessage, meta_attribute)
-    meta_attribute === :semantic_type && return Symbol("int64")
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end

@@ -149,7 +149,6 @@ end
 end
 
 function dims_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
-    meta_attribute === :semantic_type && return Symbol("int64")
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end

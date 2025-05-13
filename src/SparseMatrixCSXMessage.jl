@@ -184,7 +184,6 @@ end
 end
 
 function indexPointer_meta_attribute(::SparseMatrixCSXMessage, meta_attribute)
-    meta_attribute === :semantic_type && return Symbol("int64")
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
@@ -261,7 +260,6 @@ end
 indexPointer!(m::SparseMatrixCSXMessageEncoder, src::Symbol) = indexPointer!(m, to_string(src))
 
 function indicies_meta_attribute(::SparseMatrixCSXMessage, meta_attribute)
-    meta_attribute === :semantic_type && return Symbol("int64")
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end

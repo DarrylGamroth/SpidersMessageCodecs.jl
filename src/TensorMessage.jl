@@ -149,7 +149,6 @@ end
 end
 
 function dims_meta_attribute(::TensorMessage, meta_attribute)
-    meta_attribute === :semantic_type && return Symbol("int32")
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
@@ -226,7 +225,6 @@ end
 dims!(m::TensorMessageEncoder, src::Symbol) = dims!(m, to_string(src))
 
 function origin_meta_attribute(::TensorMessage, meta_attribute)
-    meta_attribute === :semantic_type && return Symbol("int32")
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
