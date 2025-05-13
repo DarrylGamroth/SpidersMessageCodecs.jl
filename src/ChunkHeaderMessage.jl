@@ -22,7 +22,7 @@ struct ChunkHeaderMessageEncoder{T<:AbstractArray{UInt8}} <: ChunkHeaderMessage{
     offset::Int64
     position_ptr::Base.RefValue{Int64}
     function ChunkHeaderMessageEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64}) where {T}
-        position_ptr[] = offset + 72
+        position_ptr[] = offset + 80
         new{T}(buffer, offset, position_ptr)
     end
 end
@@ -39,7 +39,7 @@ end
 @inline function ChunkHeaderMessageEncoder(buffer::AbstractArray, offset::Integer=0;
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
-    blockLength!(header, UInt16(0x48))
+    blockLength!(header, UInt16(0x50))
     templateId!(header, UInt16(0x1e))
     schemaId!(header, UInt16(0x1))
     version!(header, UInt16(0x0))
@@ -50,8 +50,8 @@ sbe_offset(m::ChunkHeaderMessage) = m.offset
 sbe_position_ptr(m::ChunkHeaderMessage) = m.position_ptr
 sbe_position(m::ChunkHeaderMessage) = m.position_ptr[]
 sbe_position!(m::ChunkHeaderMessage, position) = m.position_ptr[] = position
-sbe_block_length(::ChunkHeaderMessage) = UInt16(0x48)
-sbe_block_length(::Type{<:ChunkHeaderMessage}) = UInt16(0x48)
+sbe_block_length(::ChunkHeaderMessage) = UInt16(0x50)
+sbe_block_length(::Type{<:ChunkHeaderMessage}) = UInt16(0x50)
 sbe_template_id(::ChunkHeaderMessage) = UInt16(0x1e)
 sbe_template_id(::Type{<:ChunkHeaderMessage})  = UInt16(0x1e)
 sbe_schema_id(::ChunkHeaderMessage) = UInt16(0x1)
@@ -61,7 +61,7 @@ sbe_schema_version(::Type{<:ChunkHeaderMessage})  = UInt16(0x0)
 sbe_semantic_type(::ChunkHeaderMessage) = ""
 sbe_semantic_version(::ChunkHeaderMessage) = ""
 sbe_acting_block_length(m::ChunkHeaderMessageDecoder) = m.acting_block_length
-sbe_acting_block_length(::ChunkHeaderMessageEncoder) = UInt16(0x48)
+sbe_acting_block_length(::ChunkHeaderMessageEncoder) = UInt16(0x50)
 sbe_acting_version(m::ChunkHeaderMessageDecoder) = m.acting_version
 sbe_acting_version(::ChunkHeaderMessageEncoder) = UInt16(0x0)
 sbe_rewind!(m::ChunkHeaderMessage) = sbe_position!(m, m.offset + sbe_acting_block_length(m))
@@ -83,76 +83,194 @@ header_in_acting_version(m::ChunkHeaderMessage) = sbe_acting_version(m) >= UInt1
 header_encoding_offset(::ChunkHeaderMessage) = 0
 header(m::ChunkHeaderMessage) = SpidersMessageHeader(m.buffer, m.offset + 0, sbe_acting_version(m))
 
+function sequencenumber_meta_attribute(::ChunkHeaderMessage, meta_attribute)
+    meta_attribute === :presence && return Symbol("required")
+    return Symbol("")
+end
+sequencenumber_id(::ChunkHeaderMessage) = UInt16(0x2)
+sequencenumber_since_version(::ChunkHeaderMessage) = UInt16(0x0)
+sequencenumber_in_acting_version(m::ChunkHeaderMessage) = sbe_acting_version(m) >= UInt16(0x0)
+sequencenumber_encoding_offset(::ChunkHeaderMessage) = 64
+sequencenumber_null_value(::ChunkHeaderMessage) = Int64(-9223372036854775808)
+sequencenumber_min_value(::ChunkHeaderMessage) = Int64(-9223372036854775807)
+sequencenumber_max_value(::ChunkHeaderMessage) = Int64(9223372036854775807)
+sequencenumber_encoding_length(::ChunkHeaderMessage) = 8
+
+@inline function sequencenumber(m::ChunkHeaderMessageDecoder)
+    return decode_le(Int64, m.buffer, m.offset + 64)
+end
+@inline sequencenumber!(m::ChunkHeaderMessageEncoder, value) = encode_le(Int64, m.buffer, m.offset + 64, value)
+
 function length_meta_attribute(::ChunkHeaderMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
-length_id(::ChunkHeaderMessage) = UInt16(0x2)
+length_id(::ChunkHeaderMessage) = UInt16(0x3)
 length_since_version(::ChunkHeaderMessage) = UInt16(0x0)
 length_in_acting_version(m::ChunkHeaderMessage) = sbe_acting_version(m) >= UInt16(0x0)
-length_encoding_offset(::ChunkHeaderMessage) = 64
+length_encoding_offset(::ChunkHeaderMessage) = 72
 length_null_value(::ChunkHeaderMessage) = Int64(-9223372036854775808)
 length_min_value(::ChunkHeaderMessage) = Int64(-9223372036854775807)
 length_max_value(::ChunkHeaderMessage) = Int64(9223372036854775807)
 length_encoding_length(::ChunkHeaderMessage) = 8
 
 @inline function length(m::ChunkHeaderMessageDecoder)
-    return decode_le(Int64, m.buffer, m.offset + 64)
+    return decode_le(Int64, m.buffer, m.offset + 72)
 end
-@inline length!(m::ChunkHeaderMessageEncoder, value) = encode_le(Int64, m.buffer, m.offset + 64, value)
+@inline length!(m::ChunkHeaderMessageEncoder, value) = encode_le(Int64, m.buffer, m.offset + 72, value)
 
-function metadata_meta_attribute(::ChunkHeaderMessage, meta_attribute)
+export Metadata, MetadataDecoder, MetadataEncoder
+abstract type Metadata{T} end
+
+mutable struct MetadataDecoder{T<:AbstractArray{UInt8}} <: Metadata{T}
+    const buffer::T
+    offset::Int64
+    const position_ptr::Base.RefValue{Int64}
+    const block_length::UInt16
+    const acting_version::UInt16
+    const count::UInt16
+    index::UInt16
+    function MetadataDecoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
+        block_length::Integer, acting_version::Integer,
+        count::Integer, index::Integer) where {T}
+        new{T}(buffer, offset, position_ptr, block_length, acting_version, count, index)
+    end
+end
+
+mutable struct MetadataEncoder{T<:AbstractArray{UInt8}} <: Metadata{T}
+    const buffer::T
+    offset::Int64
+    const position_ptr::Base.RefValue{Int64}
+    const initial_position::Int64
+    const count::UInt16
+    index::UInt16
+    function MetadataEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
+        initial_position::Int64, count::Integer, index::Integer) where {T}
+        new{T}(buffer, offset, position_ptr, initial_position, count, index)
+    end
+end
+
+@inline function MetadataDecoder(buffer, position_ptr, acting_version)
+    dimensions = GroupSizeEncoding(buffer, position_ptr[])
+    position_ptr[] += 4
+    return MetadataDecoder(buffer, 0, position_ptr, blockLength(dimensions),
+        acting_version, numInGroup(dimensions), 0)
+end
+
+@inline function MetadataEncoder(buffer, count, position_ptr)
+    if count > 65534
+        error("count outside of allowed range")
+    end
+    dimensions = GroupSizeEncoding(buffer, position_ptr[])
+    blockLength!(dimensions, UInt16(0x5))
+    numInGroup!(dimensions, count)
+    initial_position = position_ptr[]
+    position_ptr[] += 4
+    return MetadataEncoder(buffer, 0, position_ptr, initial_position, count, 0)
+end
+
+sbe_header_size(::Metadata) = 4
+sbe_block_length(::Metadata) = UInt16(0x5)
+sbe_acting_block_length(g::MetadataDecoder) = g.block_length
+sbe_acting_block_length(g::MetadataEncoder) = UInt16(0x5)
+sbe_acting_version(g::MetadataDecoder) = g.acting_version
+sbe_position(g::Metadata) = g.position_ptr[]
+@inline sbe_position!(g::Metadata, position) = g.position_ptr[] = position
+sbe_position_ptr(g::Metadata) = g.position_ptr
+@inline function next!(g::Metadata)
+    if g.index >= g.count
+        error("index >= count")
+    end
+    g.offset = sbe_position(g)
+    sbe_position!(g, g.offset + sbe_acting_block_length(g))
+    g.index += 1
+    return g
+end
+function Base.iterate(g::Metadata, state=nothing)
+    if g.index < g.count
+        g.offset = sbe_position(g)
+        sbe_position!(g, g.offset + sbe_acting_block_length(g))
+        g.index += 1
+        return g, state
+    else
+        return nothing
+    end
+end
+Base.eltype(::Type{<:Metadata}) = Metadata
+Base.isdone(g::Metadata, state=nothing) = g.index >= g.count
+Base.length(g::Metadata) = g.count
+
+function reset_count_to_index!(g::MetadataEncoder)
+    g.count = g.index
+    dimensions = GroupSizeEncoding(g.buffer, g.initial_position)
+    numInGroup!(dimensions, g.count)
+    return g.count
+end
+
+function format_meta_attribute(::Metadata, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
+format_id(::Metadata) = UInt16(0x1)
+format_since_version(::Metadata) = UInt16(0x0)
+format_in_acting_version(m::Metadata) = sbe_acting_version(m) >= UInt16(0x0)
+format_encoding_offset(::Metadata) = 0
+format_encoding_length(::Metadata) = 1
+@inline function format(::Type{Integer}, m::MetadataDecoder)
+    return decode_le(Int8, m.buffer, m.offset + 0)
+end
+@inline function format(m::MetadataDecoder)
+    return Format.SbeEnum(decode_le(Int8, m.buffer, m.offset + 0))
+end
+@inline format!(m::MetadataEncoder, value::Format.SbeEnum) = encode_le(Int8, m.buffer, m.offset + 0, Int8(value))
 
-metadata_character_encoding(::ChunkHeaderMessage) = "null"
+function key_meta_attribute(::Metadata, meta_attribute)
+    meta_attribute === :presence && return Symbol("required")
+    return Symbol("")
+end
+key_id(::Metadata) = UInt16(0x3)
+key_since_version(::Metadata) = UInt16(0x0)
+key_in_acting_version(m::Metadata) = sbe_acting_version(m) >= UInt16(0x0)
+key_encoding_offset(::Metadata) = 1
+key(m::Metadata) = VarStringEncoding(m.buffer, m.offset + 1, sbe_acting_version(m))
+
+function value_meta_attribute(::Metadata, meta_attribute)
+    meta_attribute === :presence && return Symbol("required")
+    return Symbol("")
+end
+value_id(::Metadata) = UInt16(0x4)
+value_since_version(::Metadata) = UInt16(0x0)
+value_in_acting_version(m::Metadata) = sbe_acting_version(m) >= UInt16(0x0)
+value_encoding_offset(::Metadata) = 5
+value(m::Metadata) = VarDataEncoding(m.buffer, m.offset + 5, sbe_acting_version(m))
+
+function show(io::IO, writer::Metadata{T}) where {T}
+    println(io, "Metadata view over a type $T")
+    print(io, "format: ")
+    print(io, format(writer))
+
+    println(io)
+    print(io, "key: ")
+    show(io, key(writer))
+
+end
+
+@inline function sbe_skip!(m::MetadataDecoder)
+    
+    return
+end
+
+@inline function metadata(m::ChunkHeaderMessage)
+    return MetadataDecoder(m.buffer, sbe_position_ptr(m), sbe_acting_version(m))
+end
+
+@inline function metadata!(m::ChunkHeaderMessage, count)
+    return MetadataEncoder(m.buffer, count, sbe_position_ptr(m))
+end
+metadata_group_count!(m::ChunkHeaderMessageEncoder, count) = metadata!(m, count)
+metadata_id(::ChunkHeaderMessage) = 12
+metadata_since_version(::ChunkHeaderMessage) = 0
 metadata_in_acting_version(m::ChunkHeaderMessage) = sbe_acting_version(m) >= 0
-metadata_id(::ChunkHeaderMessage) = 10
-metadata_header_length(::ChunkHeaderMessage) = 4
-
-@inline function metadata_length(m::ChunkHeaderMessage)
-    return decode_le(UInt32, m.buffer, sbe_position(m))
-end
-
-@inline function metadata_length!(m::ChunkHeaderMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
-        error("buffer too short for data length")
-    elseif n > 1073741824
-        error("data length too large for length type")
-    end
-    return encode_le(UInt32, m.buffer, sbe_position(m), n)
-end
-
-@inline function skip_metadata!(m::ChunkHeaderMessage)
-    len = metadata_length(m)
-    pos = sbe_position(m) + 4
-    sbe_position!(m, pos + len)
-    return len
-end
-
-@inline function metadata(m::ChunkHeaderMessageDecoder)
-    len = metadata_length(m)
-    pos = sbe_position(m) + 4
-    sbe_position!(m, pos + len)
-    return view(m.buffer, pos+1:pos+len)
-end
-
-@inline function metadata!(m::ChunkHeaderMessageEncoder; length::Int64)
-    metadata_length!(m, length)
-    pos = sbe_position(m) + 4
-    sbe_position!(m, pos + length)
-    return view(m.buffer, pos+1:pos+length)
-end
-
-@inline function metadata!(m::ChunkHeaderMessageEncoder, src)
-    len = Base.length(src)
-    metadata_length!(m, len)
-    pos = sbe_position(m) + 4
-    sbe_position!(m, pos + len)
-    dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, src)
-end
 
 function show(io::IO, m::ChunkHeaderMessage{T}) where {T}
     println(io, "ChunkHeaderMessage view over a type $T")
@@ -167,19 +285,26 @@ function show(io::IO, m::ChunkHeaderMessage{T}) where {T}
     show(io, header(writer))
 
     println(io)
+    print(io, "sequencenumber: ")
+    print(io, sequencenumber(writer))
+
+    println(io)
     print(io, "length: ")
     print(io, length(writer))
 
     println(io)
-    print(io, "metadata: ")
-    print(io, skip_metadata!(writer))
-    print(io, " bytes of raw data")
-
+    println(io, "Metadata:")
+    for group in metadata(writer)
+        show(io, group)
+        println(io)
+    end
     nothing
 end
 
-@inline function sbe_skip!(m::ChunkHeaderMessage)
+@inline function sbe_skip!(m::ChunkHeaderMessageDecoder)
     sbe_rewind!(m)
-    skip_metadata!(m)
+    for group in metadata(m)
+        sbe_skip!(group)
+    end
     return
 end

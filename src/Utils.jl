@@ -23,3 +23,9 @@ end
     return view(a, 1:len)
 end
 
+@inline function to_string(s::Symbol)
+    p = Base.unsafe_convert(Ptr{UInt8}, s)
+    len = @ccall strlen(p::Ptr{UInt8})::Csize_t
+    return StringView(UnsafeArray(p, (unsafe_trunc(Int64, len),)))
+end
+

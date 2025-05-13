@@ -123,6 +123,10 @@ end
     return StringView(rstrip_nul(value))
 end
 
+@inline function tag(::Type{<:Symbol}, m::SpidersMessageHeaderDecoder)
+    Symbol(tag(AbstractString, m))
+end
+
 @inline function tag!(m::SpidersMessageHeaderEncoder)
     return mappedarray(ltoh, htol, reinterpret(UInt8, view(m.buffer, m.offset+32+1:m.offset+32+sizeof(UInt8)*32)))
 end
@@ -135,6 +139,10 @@ end
     dest = tag!(m)
     fill!(dest, 0)
     copyto!(dest, value)
+end
+
+@inline function tag!(m::SpidersMessageHeaderEncoder, value::Symbol)
+    tag!(m, to_string(value))
 end
 
 function show(io::IO, writer::SpidersMessageHeader{T}) where {T}

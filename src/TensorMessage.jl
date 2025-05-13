@@ -172,7 +172,7 @@ end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
-@inline function skip_dims!(m::TensorMessage)
+@inline function skip_dims!(m::TensorMessageDecoder)
     len = dims_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -186,6 +186,9 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
+dims(::Type{<:AbstractString}, m::TensorMessageDecoder) = StringView(rstrip_nul(dims(m)))
+dims(::Type{<:Symbol}, m::TensorMessageDecoder) = Symbol(dims(StringView, m))
+
 @inline function dims!(m::TensorMessageEncoder; length::Int64)
     dims_length!(m, length)
     pos = sbe_position(m) + 4
@@ -193,31 +196,51 @@ end
     return view(m.buffer, pos+1:pos+length)
 end
 
-@inline function dims!(m::TensorMessageEncoder, src)
-    len = Base.length(src)
+@inline function dims!(m::TensorMessageEncoder, src::AbstractArray)
+    len = sizeof(src)
     dims_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, src)
+    copyto!(dest, reinterpret(UInt8, src))
 end
 
-function offset_meta_attribute(::TensorMessage, meta_attribute)
+@inline function dims!(m::TensorMessageEncoder, src::NTuple{N,T}) where {N,T}
+    len = sizeof(src)
+    dims_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+end
+
+@inline function dims!(m::TensorMessageEncoder, src::AbstractString)
+    len = sizeof(src)
+    dims_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+dims!(m::TensorMessageEncoder, src::Symbol) = dims!(m, to_string(src))
+
+function origin_meta_attribute(::TensorMessage, meta_attribute)
     meta_attribute === :semantic_type && return Symbol("int32")
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
 
-offset_character_encoding(::TensorMessage) = "null"
-offset_in_acting_version(m::TensorMessage) = sbe_acting_version(m) >= 0
-offset_id(::TensorMessage) = 21
-offset_header_length(::TensorMessage) = 4
+origin_character_encoding(::TensorMessage) = "null"
+origin_in_acting_version(m::TensorMessage) = sbe_acting_version(m) >= 0
+origin_id(::TensorMessage) = 21
+origin_header_length(::TensorMessage) = 4
 
-@inline function offset_length(m::TensorMessage)
+@inline function origin_length(m::TensorMessage)
     return decode_le(UInt32, m.buffer, sbe_position(m))
 end
 
-@inline function offset_length!(m::TensorMessageEncoder, n)
+@inline function origin_length!(m::TensorMessageEncoder, n)
     if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
         error("buffer too short for data length")
     elseif n > 1073741824
@@ -226,35 +249,58 @@ end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
-@inline function skip_offset!(m::TensorMessage)
-    len = offset_length(m)
+@inline function skip_origin!(m::TensorMessageDecoder)
+    len = origin_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     return len
 end
 
-@inline function offset(m::TensorMessageDecoder)
-    len = offset_length(m)
+@inline function origin(m::TensorMessageDecoder)
+    len = origin_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     return view(m.buffer, pos+1:pos+len)
 end
 
-@inline function offset!(m::TensorMessageEncoder; length::Int64)
-    offset_length!(m, length)
+origin(::Type{<:AbstractString}, m::TensorMessageDecoder) = StringView(rstrip_nul(origin(m)))
+origin(::Type{<:Symbol}, m::TensorMessageDecoder) = Symbol(origin(StringView, m))
+
+@inline function origin!(m::TensorMessageEncoder; length::Int64)
+    origin_length!(m, length)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + length)
     return view(m.buffer, pos+1:pos+length)
 end
 
-@inline function offset!(m::TensorMessageEncoder, src)
-    len = Base.length(src)
-    offset_length!(m, len)
+@inline function origin!(m::TensorMessageEncoder, src::AbstractArray)
+    len = sizeof(src)
+    origin_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, src)
+    copyto!(dest, reinterpret(UInt8, src))
 end
+
+@inline function origin!(m::TensorMessageEncoder, src::NTuple{N,T}) where {N,T}
+    len = sizeof(src)
+    origin_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+end
+
+@inline function origin!(m::TensorMessageEncoder, src::AbstractString)
+    len = sizeof(src)
+    origin_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+origin!(m::TensorMessageEncoder, src::Symbol) = origin!(m, to_string(src))
 
 function values_meta_attribute(::TensorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
@@ -279,7 +325,7 @@ end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
-@inline function skip_values!(m::TensorMessage)
+@inline function skip_values!(m::TensorMessageDecoder)
     len = values_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -293,6 +339,9 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
+values(::Type{<:AbstractString}, m::TensorMessageDecoder) = StringView(rstrip_nul(values(m)))
+values(::Type{<:Symbol}, m::TensorMessageDecoder) = Symbol(values(StringView, m))
+
 @inline function values!(m::TensorMessageEncoder; length::Int64)
     values_length!(m, length)
     pos = sbe_position(m) + 4
@@ -300,14 +349,34 @@ end
     return view(m.buffer, pos+1:pos+length)
 end
 
-@inline function values!(m::TensorMessageEncoder, src)
-    len = Base.length(src)
+@inline function values!(m::TensorMessageEncoder, src::AbstractArray)
+    len = sizeof(src)
     values_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, src)
+    copyto!(dest, reinterpret(UInt8, src))
 end
+
+@inline function values!(m::TensorMessageEncoder, src::NTuple{N,T}) where {N,T}
+    len = sizeof(src)
+    values_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+end
+
+@inline function values!(m::TensorMessageEncoder, src::AbstractString)
+    len = sizeof(src)
+    values_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+values!(m::TensorMessageEncoder, src::Symbol) = values!(m, to_string(src))
 
 function show(io::IO, m::TensorMessage{T}) where {T}
     println(io, "TensorMessage view over a type $T")
@@ -339,8 +408,8 @@ function show(io::IO, m::TensorMessage{T}) where {T}
     print(io, " bytes of raw data")
 
     println(io)
-    print(io, "offset: ")
-    print(io, skip_offset!(writer))
+    print(io, "origin: ")
+    print(io, skip_origin!(writer))
     print(io, " bytes of raw data")
 
     println(io)
@@ -351,10 +420,10 @@ function show(io::IO, m::TensorMessage{T}) where {T}
     nothing
 end
 
-@inline function sbe_skip!(m::TensorMessage)
+@inline function sbe_skip!(m::TensorMessageDecoder)
     sbe_rewind!(m)
     skip_dims!(m)
-    skip_offset!(m)
+    skip_origin!(m)
     skip_values!(m)
     return
 end

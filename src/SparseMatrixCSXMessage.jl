@@ -207,7 +207,7 @@ end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
-@inline function skip_indexPointer!(m::SparseMatrixCSXMessage)
+@inline function skip_indexPointer!(m::SparseMatrixCSXMessageDecoder)
     len = indexPointer_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -221,6 +221,9 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
+indexPointer(::Type{<:AbstractString}, m::SparseMatrixCSXMessageDecoder) = StringView(rstrip_nul(indexPointer(m)))
+indexPointer(::Type{<:Symbol}, m::SparseMatrixCSXMessageDecoder) = Symbol(indexPointer(StringView, m))
+
 @inline function indexPointer!(m::SparseMatrixCSXMessageEncoder; length::Int64)
     indexPointer_length!(m, length)
     pos = sbe_position(m) + 4
@@ -228,14 +231,34 @@ end
     return view(m.buffer, pos+1:pos+length)
 end
 
-@inline function indexPointer!(m::SparseMatrixCSXMessageEncoder, src)
-    len = Base.length(src)
+@inline function indexPointer!(m::SparseMatrixCSXMessageEncoder, src::AbstractArray)
+    len = sizeof(src)
     indexPointer_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, src)
+    copyto!(dest, reinterpret(UInt8, src))
 end
+
+@inline function indexPointer!(m::SparseMatrixCSXMessageEncoder, src::NTuple{N,T}) where {N,T}
+    len = sizeof(src)
+    indexPointer_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+end
+
+@inline function indexPointer!(m::SparseMatrixCSXMessageEncoder, src::AbstractString)
+    len = sizeof(src)
+    indexPointer_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+indexPointer!(m::SparseMatrixCSXMessageEncoder, src::Symbol) = indexPointer!(m, to_string(src))
 
 function indicies_meta_attribute(::SparseMatrixCSXMessage, meta_attribute)
     meta_attribute === :semantic_type && return Symbol("int64")
@@ -261,7 +284,7 @@ end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
-@inline function skip_indicies!(m::SparseMatrixCSXMessage)
+@inline function skip_indicies!(m::SparseMatrixCSXMessageDecoder)
     len = indicies_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -275,6 +298,9 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
+indicies(::Type{<:AbstractString}, m::SparseMatrixCSXMessageDecoder) = StringView(rstrip_nul(indicies(m)))
+indicies(::Type{<:Symbol}, m::SparseMatrixCSXMessageDecoder) = Symbol(indicies(StringView, m))
+
 @inline function indicies!(m::SparseMatrixCSXMessageEncoder; length::Int64)
     indicies_length!(m, length)
     pos = sbe_position(m) + 4
@@ -282,14 +308,34 @@ end
     return view(m.buffer, pos+1:pos+length)
 end
 
-@inline function indicies!(m::SparseMatrixCSXMessageEncoder, src)
-    len = Base.length(src)
+@inline function indicies!(m::SparseMatrixCSXMessageEncoder, src::AbstractArray)
+    len = sizeof(src)
     indicies_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, src)
+    copyto!(dest, reinterpret(UInt8, src))
 end
+
+@inline function indicies!(m::SparseMatrixCSXMessageEncoder, src::NTuple{N,T}) where {N,T}
+    len = sizeof(src)
+    indicies_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+end
+
+@inline function indicies!(m::SparseMatrixCSXMessageEncoder, src::AbstractString)
+    len = sizeof(src)
+    indicies_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+indicies!(m::SparseMatrixCSXMessageEncoder, src::Symbol) = indicies!(m, to_string(src))
 
 function values_meta_attribute(::SparseMatrixCSXMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
@@ -314,7 +360,7 @@ end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
-@inline function skip_values!(m::SparseMatrixCSXMessage)
+@inline function skip_values!(m::SparseMatrixCSXMessageDecoder)
     len = values_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -328,6 +374,9 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
+values(::Type{<:AbstractString}, m::SparseMatrixCSXMessageDecoder) = StringView(rstrip_nul(values(m)))
+values(::Type{<:Symbol}, m::SparseMatrixCSXMessageDecoder) = Symbol(values(StringView, m))
+
 @inline function values!(m::SparseMatrixCSXMessageEncoder; length::Int64)
     values_length!(m, length)
     pos = sbe_position(m) + 4
@@ -335,14 +384,34 @@ end
     return view(m.buffer, pos+1:pos+length)
 end
 
-@inline function values!(m::SparseMatrixCSXMessageEncoder, src)
-    len = Base.length(src)
+@inline function values!(m::SparseMatrixCSXMessageEncoder, src::AbstractArray)
+    len = sizeof(src)
     values_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, src)
+    copyto!(dest, reinterpret(UInt8, src))
 end
+
+@inline function values!(m::SparseMatrixCSXMessageEncoder, src::NTuple{N,T}) where {N,T}
+    len = sizeof(src)
+    values_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+end
+
+@inline function values!(m::SparseMatrixCSXMessageEncoder, src::AbstractString)
+    len = sizeof(src)
+    values_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+values!(m::SparseMatrixCSXMessageEncoder, src::Symbol) = values!(m, to_string(src))
 
 function show(io::IO, m::SparseMatrixCSXMessage{T}) where {T}
     println(io, "SparseMatrixCSXMessage view over a type $T")
@@ -394,7 +463,7 @@ function show(io::IO, m::SparseMatrixCSXMessage{T}) where {T}
     nothing
 end
 
-@inline function sbe_skip!(m::SparseMatrixCSXMessage)
+@inline function sbe_skip!(m::SparseMatrixCSXMessageDecoder)
     sbe_rewind!(m)
     skip_indexPointer!(m)
     skip_indicies!(m)

@@ -172,7 +172,7 @@ end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
-@inline function skip_dims!(m::DiagonalMatrixMessage)
+@inline function skip_dims!(m::DiagonalMatrixMessageDecoder)
     len = dims_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -186,6 +186,9 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
+dims(::Type{<:AbstractString}, m::DiagonalMatrixMessageDecoder) = StringView(rstrip_nul(dims(m)))
+dims(::Type{<:Symbol}, m::DiagonalMatrixMessageDecoder) = Symbol(dims(StringView, m))
+
 @inline function dims!(m::DiagonalMatrixMessageEncoder; length::Int64)
     dims_length!(m, length)
     pos = sbe_position(m) + 4
@@ -193,14 +196,34 @@ end
     return view(m.buffer, pos+1:pos+length)
 end
 
-@inline function dims!(m::DiagonalMatrixMessageEncoder, src)
-    len = Base.length(src)
+@inline function dims!(m::DiagonalMatrixMessageEncoder, src::AbstractArray)
+    len = sizeof(src)
     dims_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, src)
+    copyto!(dest, reinterpret(UInt8, src))
 end
+
+@inline function dims!(m::DiagonalMatrixMessageEncoder, src::NTuple{N,T}) where {N,T}
+    len = sizeof(src)
+    dims_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+end
+
+@inline function dims!(m::DiagonalMatrixMessageEncoder, src::AbstractString)
+    len = sizeof(src)
+    dims_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+dims!(m::DiagonalMatrixMessageEncoder, src::Symbol) = dims!(m, to_string(src))
 
 function values_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
@@ -225,7 +248,7 @@ end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
-@inline function skip_values!(m::DiagonalMatrixMessage)
+@inline function skip_values!(m::DiagonalMatrixMessageDecoder)
     len = values_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -239,6 +262,9 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
+values(::Type{<:AbstractString}, m::DiagonalMatrixMessageDecoder) = StringView(rstrip_nul(values(m)))
+values(::Type{<:Symbol}, m::DiagonalMatrixMessageDecoder) = Symbol(values(StringView, m))
+
 @inline function values!(m::DiagonalMatrixMessageEncoder; length::Int64)
     values_length!(m, length)
     pos = sbe_position(m) + 4
@@ -246,14 +272,34 @@ end
     return view(m.buffer, pos+1:pos+length)
 end
 
-@inline function values!(m::DiagonalMatrixMessageEncoder, src)
-    len = Base.length(src)
+@inline function values!(m::DiagonalMatrixMessageEncoder, src::AbstractArray)
+    len = sizeof(src)
     values_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, src)
+    copyto!(dest, reinterpret(UInt8, src))
 end
+
+@inline function values!(m::DiagonalMatrixMessageEncoder, src::NTuple{N,T}) where {N,T}
+    len = sizeof(src)
+    values_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+end
+
+@inline function values!(m::DiagonalMatrixMessageEncoder, src::AbstractString)
+    len = sizeof(src)
+    values_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+values!(m::DiagonalMatrixMessageEncoder, src::Symbol) = values!(m, to_string(src))
 
 function show(io::IO, m::DiagonalMatrixMessage{T}) where {T}
     println(io, "DiagonalMatrixMessage view over a type $T")
@@ -292,7 +338,7 @@ function show(io::IO, m::DiagonalMatrixMessage{T}) where {T}
     nothing
 end
 
-@inline function sbe_skip!(m::DiagonalMatrixMessage)
+@inline function sbe_skip!(m::DiagonalMatrixMessageDecoder)
     sbe_rewind!(m)
     skip_dims!(m)
     skip_values!(m)

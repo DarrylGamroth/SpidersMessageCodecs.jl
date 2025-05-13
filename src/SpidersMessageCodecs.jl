@@ -7,6 +7,7 @@ using EnumX
 using MappedArrays
 using StaticArrays
 using StringViews
+using UnsafeArrays
 
 include("Utils.jl")
 include("Format.jl")
@@ -15,15 +16,16 @@ include("Indexing.jl")
 include("SpidersMessageHeader.jl")
 include("MessageHeader.jl")
 include("GroupSizeEncoding.jl")
+include("VarStringEncoding.jl")
 include("VarDataEncoding.jl")
 include("EventMessage.jl")
 include("TensorMessage.jl")
 include("SparseMatrixCSXMessage.jl")
 include("SparseVectorMessage.jl")
 include("DiagonalMatrixMessage.jl")
-include("TensorFragmentHeaderMessage.jl")
+include("TensorStreamHeaderMessage.jl")
 include("ChunkHeaderMessage.jl")
-include("TensorFragmentDataMessage.jl")
+include("TensorStreamDataMessage.jl")
 include("ChunkDataMessage.jl")
 
 export sbe_buffer,

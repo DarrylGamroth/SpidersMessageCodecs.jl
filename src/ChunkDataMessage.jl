@@ -22,7 +22,7 @@ struct ChunkDataMessageEncoder{T<:AbstractArray{UInt8}} <: ChunkDataMessage{T}
     offset::Int64
     position_ptr::Base.RefValue{Int64}
     function ChunkDataMessageEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64}) where {T}
-        position_ptr[] = offset + 72
+        position_ptr[] = offset + 80
         new{T}(buffer, offset, position_ptr)
     end
 end
@@ -39,7 +39,7 @@ end
 @inline function ChunkDataMessageEncoder(buffer::AbstractArray, offset::Integer=0;
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
-    blockLength!(header, UInt16(0x48))
+    blockLength!(header, UInt16(0x50))
     templateId!(header, UInt16(0x1f))
     schemaId!(header, UInt16(0x1))
     version!(header, UInt16(0x0))
@@ -50,8 +50,8 @@ sbe_offset(m::ChunkDataMessage) = m.offset
 sbe_position_ptr(m::ChunkDataMessage) = m.position_ptr
 sbe_position(m::ChunkDataMessage) = m.position_ptr[]
 sbe_position!(m::ChunkDataMessage, position) = m.position_ptr[] = position
-sbe_block_length(::ChunkDataMessage) = UInt16(0x48)
-sbe_block_length(::Type{<:ChunkDataMessage}) = UInt16(0x48)
+sbe_block_length(::ChunkDataMessage) = UInt16(0x50)
+sbe_block_length(::Type{<:ChunkDataMessage}) = UInt16(0x50)
 sbe_template_id(::ChunkDataMessage) = UInt16(0x1f)
 sbe_template_id(::Type{<:ChunkDataMessage})  = UInt16(0x1f)
 sbe_schema_id(::ChunkDataMessage) = UInt16(0x1)
@@ -61,7 +61,7 @@ sbe_schema_version(::Type{<:ChunkDataMessage})  = UInt16(0x0)
 sbe_semantic_type(::ChunkDataMessage) = ""
 sbe_semantic_version(::ChunkDataMessage) = ""
 sbe_acting_block_length(m::ChunkDataMessageDecoder) = m.acting_block_length
-sbe_acting_block_length(::ChunkDataMessageEncoder) = UInt16(0x48)
+sbe_acting_block_length(::ChunkDataMessageEncoder) = UInt16(0x50)
 sbe_acting_version(m::ChunkDataMessageDecoder) = m.acting_version
 sbe_acting_version(::ChunkDataMessageEncoder) = UInt16(0x0)
 sbe_rewind!(m::ChunkDataMessage) = sbe_position!(m, m.offset + sbe_acting_block_length(m))
@@ -83,23 +83,41 @@ header_in_acting_version(m::ChunkDataMessage) = sbe_acting_version(m) >= UInt16(
 header_encoding_offset(::ChunkDataMessage) = 0
 header(m::ChunkDataMessage) = SpidersMessageHeader(m.buffer, m.offset + 0, sbe_acting_version(m))
 
+function sequencenumber_meta_attribute(::ChunkDataMessage, meta_attribute)
+    meta_attribute === :presence && return Symbol("required")
+    return Symbol("")
+end
+sequencenumber_id(::ChunkDataMessage) = UInt16(0x2)
+sequencenumber_since_version(::ChunkDataMessage) = UInt16(0x0)
+sequencenumber_in_acting_version(m::ChunkDataMessage) = sbe_acting_version(m) >= UInt16(0x0)
+sequencenumber_encoding_offset(::ChunkDataMessage) = 64
+sequencenumber_null_value(::ChunkDataMessage) = Int64(-9223372036854775808)
+sequencenumber_min_value(::ChunkDataMessage) = Int64(-9223372036854775807)
+sequencenumber_max_value(::ChunkDataMessage) = Int64(9223372036854775807)
+sequencenumber_encoding_length(::ChunkDataMessage) = 8
+
+@inline function sequencenumber(m::ChunkDataMessageDecoder)
+    return decode_le(Int64, m.buffer, m.offset + 64)
+end
+@inline sequencenumber!(m::ChunkDataMessageEncoder, value) = encode_le(Int64, m.buffer, m.offset + 64, value)
+
 function offset_meta_attribute(::ChunkDataMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
-offset_id(::ChunkDataMessage) = UInt16(0x2)
+offset_id(::ChunkDataMessage) = UInt16(0x3)
 offset_since_version(::ChunkDataMessage) = UInt16(0x0)
 offset_in_acting_version(m::ChunkDataMessage) = sbe_acting_version(m) >= UInt16(0x0)
-offset_encoding_offset(::ChunkDataMessage) = 64
+offset_encoding_offset(::ChunkDataMessage) = 72
 offset_null_value(::ChunkDataMessage) = Int64(-9223372036854775808)
 offset_min_value(::ChunkDataMessage) = Int64(-9223372036854775807)
 offset_max_value(::ChunkDataMessage) = Int64(9223372036854775807)
 offset_encoding_length(::ChunkDataMessage) = 8
 
 @inline function offset(m::ChunkDataMessageDecoder)
-    return decode_le(Int64, m.buffer, m.offset + 64)
+    return decode_le(Int64, m.buffer, m.offset + 72)
 end
-@inline offset!(m::ChunkDataMessageEncoder, value) = encode_le(Int64, m.buffer, m.offset + 64, value)
+@inline offset!(m::ChunkDataMessageEncoder, value) = encode_le(Int64, m.buffer, m.offset + 72, value)
 
 function chunk_meta_attribute(::ChunkDataMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
@@ -124,7 +142,7 @@ end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
-@inline function skip_chunk!(m::ChunkDataMessage)
+@inline function skip_chunk!(m::ChunkDataMessageDecoder)
     len = chunk_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -138,6 +156,9 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
+chunk(::Type{<:AbstractString}, m::ChunkDataMessageDecoder) = StringView(rstrip_nul(chunk(m)))
+chunk(::Type{<:Symbol}, m::ChunkDataMessageDecoder) = Symbol(chunk(StringView, m))
+
 @inline function chunk!(m::ChunkDataMessageEncoder; length::Int64)
     chunk_length!(m, length)
     pos = sbe_position(m) + 4
@@ -145,14 +166,34 @@ end
     return view(m.buffer, pos+1:pos+length)
 end
 
-@inline function chunk!(m::ChunkDataMessageEncoder, src)
-    len = Base.length(src)
+@inline function chunk!(m::ChunkDataMessageEncoder, src::AbstractArray)
+    len = sizeof(src)
     chunk_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, src)
+    copyto!(dest, reinterpret(UInt8, src))
 end
+
+@inline function chunk!(m::ChunkDataMessageEncoder, src::NTuple{N,T}) where {N,T}
+    len = sizeof(src)
+    chunk_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+end
+
+@inline function chunk!(m::ChunkDataMessageEncoder, src::AbstractString)
+    len = sizeof(src)
+    chunk_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+chunk!(m::ChunkDataMessageEncoder, src::Symbol) = chunk!(m, to_string(src))
 
 function show(io::IO, m::ChunkDataMessage{T}) where {T}
     println(io, "ChunkDataMessage view over a type $T")
@@ -167,6 +208,10 @@ function show(io::IO, m::ChunkDataMessage{T}) where {T}
     show(io, header(writer))
 
     println(io)
+    print(io, "sequencenumber: ")
+    print(io, sequencenumber(writer))
+
+    println(io)
     print(io, "offset: ")
     print(io, offset(writer))
 
@@ -178,7 +223,7 @@ function show(io::IO, m::ChunkDataMessage{T}) where {T}
     nothing
 end
 
-@inline function sbe_skip!(m::ChunkDataMessage)
+@inline function sbe_skip!(m::ChunkDataMessageDecoder)
     sbe_rewind!(m)
     skip_chunk!(m)
     return

@@ -194,7 +194,7 @@ end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
-@inline function skip_indicies!(m::SparseVectorMessage)
+@inline function skip_indicies!(m::SparseVectorMessageDecoder)
     len = indicies_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -208,6 +208,9 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
+indicies(::Type{<:AbstractString}, m::SparseVectorMessageDecoder) = StringView(rstrip_nul(indicies(m)))
+indicies(::Type{<:Symbol}, m::SparseVectorMessageDecoder) = Symbol(indicies(StringView, m))
+
 @inline function indicies!(m::SparseVectorMessageEncoder; length::Int64)
     indicies_length!(m, length)
     pos = sbe_position(m) + 4
@@ -215,14 +218,34 @@ end
     return view(m.buffer, pos+1:pos+length)
 end
 
-@inline function indicies!(m::SparseVectorMessageEncoder, src)
-    len = Base.length(src)
+@inline function indicies!(m::SparseVectorMessageEncoder, src::AbstractArray)
+    len = sizeof(src)
     indicies_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, src)
+    copyto!(dest, reinterpret(UInt8, src))
 end
+
+@inline function indicies!(m::SparseVectorMessageEncoder, src::NTuple{N,T}) where {N,T}
+    len = sizeof(src)
+    indicies_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+end
+
+@inline function indicies!(m::SparseVectorMessageEncoder, src::AbstractString)
+    len = sizeof(src)
+    indicies_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+indicies!(m::SparseVectorMessageEncoder, src::Symbol) = indicies!(m, to_string(src))
 
 function values_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
@@ -247,7 +270,7 @@ end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
-@inline function skip_values!(m::SparseVectorMessage)
+@inline function skip_values!(m::SparseVectorMessageDecoder)
     len = values_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -261,6 +284,9 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
+values(::Type{<:AbstractString}, m::SparseVectorMessageDecoder) = StringView(rstrip_nul(values(m)))
+values(::Type{<:Symbol}, m::SparseVectorMessageDecoder) = Symbol(values(StringView, m))
+
 @inline function values!(m::SparseVectorMessageEncoder; length::Int64)
     values_length!(m, length)
     pos = sbe_position(m) + 4
@@ -268,14 +294,34 @@ end
     return view(m.buffer, pos+1:pos+length)
 end
 
-@inline function values!(m::SparseVectorMessageEncoder, src)
-    len = Base.length(src)
+@inline function values!(m::SparseVectorMessageEncoder, src::AbstractArray)
+    len = sizeof(src)
     values_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, src)
+    copyto!(dest, reinterpret(UInt8, src))
 end
+
+@inline function values!(m::SparseVectorMessageEncoder, src::NTuple{N,T}) where {N,T}
+    len = sizeof(src)
+    values_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+end
+
+@inline function values!(m::SparseVectorMessageEncoder, src::AbstractString)
+    len = sizeof(src)
+    values_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+values!(m::SparseVectorMessageEncoder, src::Symbol) = values!(m, to_string(src))
 
 function show(io::IO, m::SparseVectorMessage{T}) where {T}
     println(io, "SparseVectorMessage view over a type $T")
@@ -322,7 +368,7 @@ function show(io::IO, m::SparseVectorMessage{T}) where {T}
     nothing
 end
 
-@inline function sbe_skip!(m::SparseVectorMessage)
+@inline function sbe_skip!(m::SparseVectorMessageDecoder)
     sbe_rewind!(m)
     skip_indicies!(m)
     skip_values!(m)

@@ -33,11 +33,13 @@
         </composite>
 
         <composite name="SpidersMessageHeader" description="Common fields of SPIDERS messages">
-            <type name="channelRcvTimestampNs" primitiveType="int64"
+            <type name="channelRcvTimestampNs" primitiveType="int64" epoch="UNIX"
+                timeUnit="nanosecond"
                 description="Timestamp of received message (optionally inserted by UDP transport)" />
-            <type name="channelSndTimestampNs" primitiveType="int64"
+            <type name="channelSndTimestampNs" primitiveType="int64" epoch="UNIX"
+                timeUnit="nanosecond"
                 description="Timestamp of message sent (optionally inserted by UDP transport)" />
-            <type name="TimestampNs" primitiveType="int64"
+            <type name="TimestampNs" primitiveType="int64" epoch="UNIX" timeUnit="nanosecond"
                 description="Message Timestamp" />
             <type name="correlationId" primitiveType="int64"
                 description="Unique number to track message" />
@@ -54,7 +56,7 @@
         <type name="String32" description="Fixed length string (32)" primitiveType="char"
             length="32" />
 
-        <enum name="Format" decscription="SPIDERS Data Format" encodingType="int8">
+        <enum name="Format" description="SPIDERS Data Format" encodingType="int8">
             <validValue name="NOTHING">0</validValue>
             <validValue name="UINT8">1</validValue>
             <validValue name="INT8">2</validValue>
@@ -132,9 +134,9 @@
             description="Byte buffer array of int32 of size along each dimension"
             semanticType="int32"
             type="varDataEncoding" />
-        <data name="offset"
+        <data name="origin"
             id="21"
-            description="Byte buffer array of int32 of offsets. Used for specifying a region-of-interest"
+            description="Byte buffer array of int32 of origin. Used for specifying a region-of-interest"
             semanticType="int32"
             type="varDataEncoding" />
         <data name="values"
@@ -251,52 +253,82 @@
             type="varDataEncoding" />
     </sbe:message>
 
-    <sbe:message name="TensorFragmentHeaderMessage"
+    <sbe:message name="TensorStreamHeaderMessage"
         id="14"
-        description="Tensor fragment header message format">
+        description="Tensor streaming header message format.">
         <field name="header"
             id="1"
             type="SpidersMessageHeader" />
-        <field name="format"
+        <field name="sequencenumber"
             id="2"
+            description="Sequence number of message in stream"
+            type="int64" />
+        <field name="format"
+            id="3"
             description="Element data format"
             type="Format" />
         <field name="order"
-            id="3"
+            id="4"
             description="Ordering of data in tensor (column or row major)"
             type="MajorOrder" />
         <field name="reserved1"
-            id="4"
+            id="5"
             description="Reserved field"
             type="Pad2" />
-        <group name="group" id="23" dimensionType="groupSizeEncoding">
-            <field name="groupField1" id="11" type="int32" />
+        <group name="slice"
+            id="11"
+            dimensionType="groupSizeEncoding"
+            description="Slice specification per dimension">
+            <field name="start"
+                id="1"
+                description="Start index of slice"
+                type="int32" />
+            <field name="stop"
+                id="2"
+                description="Stop index of slice"
+                type="int32" />
+        </group>
+        <group name="metadata"
+            id="12"
+            dimensionType="groupSizeEncoding"
+            description="Arbitrary metadata as format-key-value triplet">
+            <field name="format"
+                id="1"
+                type="Format"
+                description="Element data format" />
+            <field name="key"
+                id="3"
+                type="varStringEncoding"
+                description="Metadata key" />
+            <field name="value"
+                id="4"
+                type="varDataEncoding"
+                description="Metadata value as string or serialized encoding" />
         </group>
         <data name="dims"
-            id="20"
-            description="Byte buffer array of int32 of size along each dimension"
-            semanticType="int32"
-            type="varDataEncoding" />
-        <data name="offset"
-            id="21"
-            description="Byte buffer array of int32 of offsets. Used for specifying a region-of-interest"
+            id="10"
+            description="Byte buffer array of int32 of size along each dimension."
             semanticType="int32"
             type="varDataEncoding" />
     </sbe:message>
 
-    <sbe:message name="TensorFragmentDataMessage"
+    <sbe:message name="TensorStreamDataMessage"
         id="15"
-        description="Tensor fragment data message format">
+        description="Tensor streaming data message format">
         <field name="header"
             id="1"
             type="SpidersMessageHeader" />
-        <field name="offset"
+        <field name="sequencenumber"
             id="2"
-            description="Offset in bytes of destination in assembled buffer"
+            description="Sequence number of message in stream"
             type="int64" />
-        <data name="fragment"
-            id="10"
-            description="Byte buffer containing fragment data"
+        <field name="offset"
+            id="11"
+            description="Offset in bytes of destination in assembled buffer"
+            type="uint64" />
+        <data name="chunk"
+            id="20"
+            description="Byte buffer containing chunk data"
             type="varDataEncoding" />
     </sbe:message>
 
@@ -306,14 +338,31 @@
         <field name="header"
             id="1"
             type="SpidersMessageHeader" />
-        <field name="length"
+        <field name="sequencenumber"
             id="2"
+            description="Sequence number of message in stream"
+            type="int64" />
+        <field name="length"
+            id="3"
             description="Length of data"
             type="int64" />
-        <data name="metadata"
-            id="10"
-            description="Metadata"
-            type="varDataEncoding" />
+        <group name="metadata"
+            id="12"
+            dimensionType="groupSizeEncoding"
+            description="Arbitrary metadata as format-key-value triplet">
+            <field name="format"
+                id="1"
+                type="Format"
+                description="Element data format" />
+            <field name="key"
+                id="3"
+                type="varStringEncoding"
+                description="Metadata key" />
+            <field name="value"
+                id="4"
+                type="varDataEncoding"
+                description="Metadata value as string or serialized encoding" />
+        </group>
     </sbe:message>
 
     <sbe:message name="ChunkDataMessage"
@@ -322,8 +371,12 @@
         <field name="header"
             id="1"
             type="SpidersMessageHeader" />
-        <field name="offset"
+        <field name="sequencenumber"
             id="2"
+            description="Sequence number of message in stream"
+            type="int64" />
+        <field name="offset"
+            id="3"
             description="Offset in bytes of destination in assembled buffer"
             type="int64" />
         <data name="chunk"

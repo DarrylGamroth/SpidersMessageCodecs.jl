@@ -159,6 +159,10 @@ end
     return StringView(rstrip_nul(value))
 end
 
+@inline function key(::Type{<:Symbol}, m::EventMessageDecoder)
+    Symbol(key(AbstractString, m))
+end
+
 @inline function key!(m::EventMessageEncoder)
     return mappedarray(ltoh, htol, reinterpret(UInt8, view(m.buffer, m.offset+68+1:m.offset+68+sizeof(UInt8)*32)))
 end
@@ -171,6 +175,10 @@ end
     dest = key!(m)
     fill!(dest, 0)
     copyto!(dest, value)
+end
+
+@inline function key!(m::EventMessageEncoder, value::Symbol)
+    key!(m, to_string(value))
 end
 
 function value_meta_attribute(::EventMessage, meta_attribute)
@@ -196,7 +204,7 @@ end
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
-@inline function skip_value!(m::EventMessage)
+@inline function skip_value!(m::EventMessageDecoder)
     len = value_length(m)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
@@ -210,6 +218,9 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
+value(::Type{<:AbstractString}, m::EventMessageDecoder) = StringView(rstrip_nul(value(m)))
+value(::Type{<:Symbol}, m::EventMessageDecoder) = Symbol(value(StringView, m))
+
 @inline function value!(m::EventMessageEncoder; length::Int64)
     value_length!(m, length)
     pos = sbe_position(m) + 4
@@ -217,14 +228,34 @@ end
     return view(m.buffer, pos+1:pos+length)
 end
 
-@inline function value!(m::EventMessageEncoder, src)
-    len = Base.length(src)
+@inline function value!(m::EventMessageEncoder, src::AbstractArray)
+    len = sizeof(src)
     value_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, src)
+    copyto!(dest, reinterpret(UInt8, src))
 end
+
+@inline function value!(m::EventMessageEncoder, src::NTuple{N,T}) where {N,T}
+    len = sizeof(src)
+    value_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+end
+
+@inline function value!(m::EventMessageEncoder, src::AbstractString)
+    len = sizeof(src)
+    value_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+value!(m::EventMessageEncoder, src::Symbol) = value!(m, to_string(src))
 
 function show(io::IO, m::EventMessage{T}) where {T}
     println(io, "EventMessage view over a type $T")
@@ -260,7 +291,7 @@ function show(io::IO, m::EventMessage{T}) where {T}
     nothing
 end
 
-@inline function sbe_skip!(m::EventMessage)
+@inline function sbe_skip!(m::EventMessageDecoder)
     sbe_rewind!(m)
     skip_value!(m)
     return
