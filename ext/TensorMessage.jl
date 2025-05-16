@@ -65,13 +65,13 @@ end
     N = div(Int(SpidersMessageCodecs.dims_length(m)), sizeof(Int32))
     return _decode(AbstractTensorMessageArray{T,N,O}, m)
 end
-@inline function SpidersMessageCodecs.decode(::Type{A}, m::TensorMessageDecoder) where {T,N,A<:AbstractArray{T,N}}
+@inline function SpidersMessageCodecs.decode(m::TensorMessageDecoder, ::Type{A}) where {T,N,A<:AbstractArray{T,N}}
     _decode(AbstractTensorMessageArray{T,N,order(A)}, m)
 end
-@inline function SpidersMessageCodecs.encode(::Type{A}, m::TensorMessageEncoder, dims; origin=nothing) where {T,N,A<:AbstractArray{T,N}}
+@inline function SpidersMessageCodecs.encode(m::TensorMessageEncoder, ::Type{A}, dims; origin=nothing) where {T,N,A<:AbstractArray{T,N}}
     _encode(AbstractTensorMessageArray{T,N,order(A)}, m, dims; origin=origin)
 end
-@inline function SpidersMessageCodecs.encode(::Type{A}, m::TensorMessageEncoder, dims...; origin=nothing) where {T,N,A<:AbstractArray{T,N}}
+@inline function SpidersMessageCodecs.encode(m::TensorMessageEncoder, ::Type{A}, dims...; origin=nothing) where {T,N,A<:AbstractArray{T,N}}
     _encode(AbstractTensorMessageArray{T,N,order(A)}, m, dims; origin=origin)
 end
 @inline function SpidersMessageCodecs.encode(m::TensorMessageEncoder, src::A; origin=nothing) where {T,N,A<:AbstractArray{T,N}}
