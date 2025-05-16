@@ -286,11 +286,11 @@
                 id="1"
                 type="Format"
                 description="Element data format" />
-            <field name="key"
+            <data name="key"
                 id="3"
                 type="varStringEncoding"
                 description="Metadata key" />
-            <field name="value"
+            <data name="value"
                 id="4"
                 type="varDataEncoding"
                 description="Metadata value as string or serialized encoding" />
@@ -343,11 +343,11 @@
                 id="1"
                 type="Format"
                 description="Element data format" />
-            <field name="key"
+            <data name="key"
                 id="3"
                 type="varStringEncoding"
                 description="Metadata key" />
-            <field name="value"
+            <data name="value"
                 id="4"
                 type="varDataEncoding"
                 description="Metadata value as string or serialized encoding" />
