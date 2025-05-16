@@ -16,12 +16,16 @@ const VarStringEncodingEncoder = VarStringEncoding
 sbe_buffer(m::VarStringEncoding) = m.buffer
 sbe_offset(m::VarStringEncoding) = m.offset
 sbe_acting_version(m::VarStringEncoding) = m.acting_version
-sbe_encoded_length(::VarStringEncoding) = UInt16(0x4)
-sbe_encoded_length(::Type{<:VarStringEncoding}) = UInt16(0x4)
+sbe_encoded_length(::VarStringEncoding) = typemax(UInt16)
+sbe_encoded_length(::Type{<:VarStringEncoding}) = typemax(UInt16)
 sbe_schema_id(::VarStringEncoding) = UInt16(0x1)
 sbe_schema_id(::Type{<:VarStringEncoding}) = UInt16(0x1)
 sbe_schema_version(::VarStringEncoding) = UInt16(0x0)
 sbe_schema_version(::Type{<:VarStringEncoding}) = UInt16(0x0)
+
+function Base.convert(::Type{<:AbstractArray{UInt8}}, m::VarStringEncodingEncoder)
+    return view(m.buffer, m.offset+1:m.offset+sbe_encoded_length(m))
+end
 
 function length_meta_attribute(::VarStringEncoding, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
@@ -52,7 +56,7 @@ varData_encoding_offset(::VarStringEncoding) = 4
 varData_null_value(::VarStringEncoding) = UInt8(0xff)
 varData_min_value(::VarStringEncoding) = UInt8(0x0)
 varData_max_value(::VarStringEncoding) = UInt8(0xfe)
-varData_encoding_length(::VarStringEncoding) = 0
+varData_encoding_length(::VarStringEncoding) = -1
 
 function show(io::IO, writer::VarStringEncoding{T}) where {T}
     println(io, "VarStringEncoding view over a type $T")

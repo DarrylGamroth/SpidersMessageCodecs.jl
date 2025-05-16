@@ -23,6 +23,10 @@ sbe_schema_id(::Type{<:SpidersMessageHeader}) = UInt16(0x1)
 sbe_schema_version(::SpidersMessageHeader) = UInt16(0x0)
 sbe_schema_version(::Type{<:SpidersMessageHeader}) = UInt16(0x0)
 
+function Base.convert(::Type{<:AbstractArray{UInt8}}, m::SpidersMessageHeaderEncoder)
+    return view(m.buffer, m.offset+1:m.offset+sbe_encoded_length(m))
+end
+
 function channelRcvTimestampNs_meta_attribute(::SpidersMessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
@@ -114,17 +118,17 @@ tag_eltype(::SpidersMessageHeader) = UInt8
     return mappedarray(ltoh, reinterpret(UInt8, view(m.buffer, m.offset+32+1:m.offset+32+sizeof(UInt8)*32)))
 end
 
-@inline function tag(::Type{<:SVector},m::SpidersMessageHeaderDecoder)
+@inline function tag(m::SpidersMessageHeaderDecoder, ::Type{<:SVector})
     return mappedarray(ltoh, reinterpret(SVector{32,UInt8}, view(m.buffer, m.offset+32+1:m.offset+32+sizeof(UInt8)*32))[])
 end
 
-@inline function tag(::Type{<:AbstractString}, m::SpidersMessageHeaderDecoder)
+@inline function tag(m::SpidersMessageHeaderDecoder, ::Type{<:AbstractString})
     value = view(m.buffer, m.offset+1+32:m.offset+32+sizeof(UInt8)*32)
     return StringView(rstrip_nul(value))
 end
 
-@inline function tag(::Type{<:Symbol}, m::SpidersMessageHeaderDecoder)
-    Symbol(tag(AbstractString, m))
+@inline function tag(m::SpidersMessageHeaderDecoder, ::Type{<:Symbol})
+    Symbol(tag(m, AbstractString))
 end
 
 @inline function tag!(m::SpidersMessageHeaderEncoder)
@@ -165,7 +169,7 @@ function show(io::IO, writer::SpidersMessageHeader{T}) where {T}
     println(io)
     print(io, "tag: ")
     print(io, "\"")
-    print(io, tag(StringView, writer))
+    print(io, tag(writer, StringView))
     print(io, "\"")
 
 end

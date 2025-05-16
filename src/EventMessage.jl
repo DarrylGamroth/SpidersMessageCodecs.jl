@@ -17,13 +17,14 @@ struct EventMessageDecoder{T<:AbstractArray{UInt8}} <: EventMessage{T}
     end
 end
 
-struct EventMessageEncoder{T<:AbstractArray{UInt8}} <: EventMessage{T}
+struct EventMessageEncoder{T<:AbstractArray{UInt8},HasSbeHeader} <: EventMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    function EventMessageEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64}) where {T}
+    function EventMessageEncoder(buffer::T, offset::Integer,
+        position_ptr::Ref{Int64}, hasSbeHeader::Bool=false) where {T}
         position_ptr[] = offset + 100
-        new{T}(buffer, offset, position_ptr)
+        new{T,hasSbeHeader}(buffer, offset, position_ptr)
     end
 end
 
@@ -31,7 +32,7 @@ end
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
     if templateId(header) != UInt16(0x1) || schemaId(header) != UInt16(0x1)
-        error("Template id or schema id mismatch")
+        throw(DomainError("Template id or schema id mismatch"))
     end
     EventMessageDecoder(buffer, offset + sbe_encoded_length(header), position_ptr,
         blockLength(header), version(header))
@@ -43,7 +44,7 @@ end
     templateId!(header, UInt16(0x1))
     schemaId!(header, UInt16(0x1))
     version!(header, UInt16(0x0))
-    EventMessageEncoder(buffer, offset + sbe_encoded_length(header), position_ptr)
+    EventMessageEncoder(buffer, offset + sbe_encoded_length(header), position_ptr, true)
 end
 sbe_buffer(m::EventMessage) = m.buffer
 sbe_offset(m::EventMessage) = m.offset
@@ -73,6 +74,13 @@ sbe_encoded_length(m::EventMessage) = sbe_position(m) - m.offset
     sbe_encoded_length(skipper)
 end
 
+function Base.convert(::Type{AbstractArray{UInt8}}, m::EventMessageEncoder{<:AbstractArray{UInt8},true})
+    return view(m.buffer, m.offset+1-sbe_encoded_length(MessageHeader):m.offset+sbe_encoded_length(m))
+end
+function Base.convert(::Type{AbstractArray{UInt8}}, m::EventMessageEncoder{<:AbstractArray{UInt8},false})
+    return view(m.buffer, m.offset+1:m.offset+sbe_encoded_length(m))
+end
+
 function header_meta_attribute(::EventMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
@@ -92,7 +100,7 @@ format_since_version(::EventMessage) = UInt16(0x0)
 format_in_acting_version(m::EventMessage) = sbe_acting_version(m) >= UInt16(0x0)
 format_encoding_offset(::EventMessage) = 64
 format_encoding_length(::EventMessage) = 1
-@inline function format(::Type{Integer}, m::EventMessageDecoder)
+@inline function format(m::EventMessageDecoder, ::Type{Integer})
     return decode_le(Int8, m.buffer, m.offset + 64)
 end
 @inline function format(m::EventMessageDecoder)
@@ -119,7 +127,7 @@ reserved1_eltype(::EventMessage) = Int8
     return mappedarray(ltoh, reinterpret(Int8, view(m.buffer, m.offset+65+1:m.offset+65+sizeof(Int8)*3)))
 end
 
-@inline function reserved1(::Type{<:SVector},m::EventMessageDecoder)
+@inline function reserved1(m::EventMessageDecoder, ::Type{<:SVector})
     return mappedarray(ltoh, reinterpret(SVector{3,Int8}, view(m.buffer, m.offset+65+1:m.offset+65+sizeof(Int8)*3))[])
 end
 
@@ -150,17 +158,17 @@ key_eltype(::EventMessage) = UInt8
     return mappedarray(ltoh, reinterpret(UInt8, view(m.buffer, m.offset+68+1:m.offset+68+sizeof(UInt8)*32)))
 end
 
-@inline function key(::Type{<:SVector},m::EventMessageDecoder)
+@inline function key(m::EventMessageDecoder, ::Type{<:SVector})
     return mappedarray(ltoh, reinterpret(SVector{32,UInt8}, view(m.buffer, m.offset+68+1:m.offset+68+sizeof(UInt8)*32))[])
 end
 
-@inline function key(::Type{<:AbstractString}, m::EventMessageDecoder)
+@inline function key(m::EventMessageDecoder, ::Type{<:AbstractString})
     value = view(m.buffer, m.offset+1+68:m.offset+68+sizeof(UInt8)*32)
     return StringView(rstrip_nul(value))
 end
 
-@inline function key(::Type{<:Symbol}, m::EventMessageDecoder)
-    Symbol(key(AbstractString, m))
+@inline function key(m::EventMessageDecoder, ::Type{<:Symbol})
+    Symbol(key(m, AbstractString))
 end
 
 @inline function key!(m::EventMessageEncoder)
@@ -196,11 +204,8 @@ value_header_length(::EventMessage) = 4
 end
 
 @inline function value_length!(m::EventMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
-        error("buffer too short for data length")
-    elseif n > 1073741824
-        error("data length too large for length type")
-    end
+    @boundscheck n > 1073741824 && throw(ArgumentError("length exceeds schema limit"))
+    @boundscheck checkbounds(m.buffer, sbe_position(m) + 4 + n)
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
@@ -218,14 +223,18 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-value(::Type{<:AbstractString}, m::EventMessageDecoder) = StringView(rstrip_nul(value(m)))
-value(::Type{<:Symbol}, m::EventMessageDecoder) = Symbol(value(StringView, m))
+@inline value(m::EventMessageDecoder, ::Type{AbstractArray{T}}) where {T<:Real} = reinterpret(T, value(m))
+@inline value(m::EventMessageDecoder, ::Type{NTuple{N,T}}) where {N,T<:Real} = (x = reinterpret(T, value(m)); ntuple(i -> x[i], Val(N)))
+@inline value(m::EventMessageDecoder, ::Type{T}) where {T<:AbstractString} = StringView(rstrip_nul(value(m)))
+@inline value(m::EventMessageDecoder, ::Type{T}) where {T<:Symbol} = Symbol(value(m, StringView))
+@inline value(m::EventMessageDecoder, ::Type{T}) where {T<:Real} = reinterpret(T, value(m))[]
+@inline value(m::EventMessageDecoder, ::Type{T}) where {T<:Nothing} = (skip_value!(m); nothing)
 
-@inline function value!(m::EventMessageEncoder; length::Int64)
-    value_length!(m, length)
+@inline function value_buffer!(m::EventMessageEncoder, len)
+    value_length!(m, len)
     pos = sbe_position(m) + 4
-    sbe_position!(m, pos + length)
-    return view(m.buffer, pos+1:pos+length)
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
 end
 
 @inline function value!(m::EventMessageEncoder, src::AbstractArray)
@@ -237,13 +246,13 @@ end
     copyto!(dest, reinterpret(UInt8, src))
 end
 
-@inline function value!(m::EventMessageEncoder, src::NTuple{N,T}) where {N,T}
+@inline function value!(m::EventMessageEncoder, src::NTuple)
     len = sizeof(src)
     value_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+    copyto!(dest, reinterpret(NTuple{len,UInt8}, src))
 end
 
 @inline function value!(m::EventMessageEncoder, src::AbstractString)
@@ -255,7 +264,10 @@ end
     copyto!(dest, transcode(UInt8, src))
 end
 
-value!(m::EventMessageEncoder, src::Symbol) = value!(m, to_string(src))
+@inline value!(m::EventMessageEncoder, src::Symbol) = value!(m, to_string(src))
+@inline value!(m::EventMessageEncoder, src::StaticString) = value!(m, Tuple(src))
+@inline value!(m::EventMessageEncoder, src::Real) = value!(m, Tuple(src))
+@inline value!(m::EventMessageEncoder, ::Nothing) = value_buffer!(m, 0)
 
 function show(io::IO, m::EventMessage{T}) where {T}
     println(io, "EventMessage view over a type $T")
@@ -280,7 +292,7 @@ function show(io::IO, m::EventMessage{T}) where {T}
     println(io)
     print(io, "key: ")
     print(io, "\"")
-    print(io, key(StringView, writer))
+    print(io, key(writer, StringView))
     print(io, "\"")
 
     println(io)

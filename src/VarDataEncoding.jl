@@ -23,6 +23,10 @@ sbe_schema_id(::Type{<:VarDataEncoding}) = UInt16(0x1)
 sbe_schema_version(::VarDataEncoding) = UInt16(0x0)
 sbe_schema_version(::Type{<:VarDataEncoding}) = UInt16(0x0)
 
+function Base.convert(::Type{<:AbstractArray{UInt8}}, m::VarDataEncodingEncoder)
+    return view(m.buffer, m.offset+1:m.offset+sbe_encoded_length(m))
+end
+
 function length_meta_attribute(::VarDataEncoding, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")

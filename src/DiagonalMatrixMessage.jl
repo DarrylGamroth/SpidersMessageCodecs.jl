@@ -17,13 +17,14 @@ struct DiagonalMatrixMessageDecoder{T<:AbstractArray{UInt8}} <: DiagonalMatrixMe
     end
 end
 
-struct DiagonalMatrixMessageEncoder{T<:AbstractArray{UInt8}} <: DiagonalMatrixMessage{T}
+struct DiagonalMatrixMessageEncoder{T<:AbstractArray{UInt8},HasSbeHeader} <: DiagonalMatrixMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    function DiagonalMatrixMessageEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64}) where {T}
+    function DiagonalMatrixMessageEncoder(buffer::T, offset::Integer,
+        position_ptr::Ref{Int64}, hasSbeHeader::Bool=false) where {T}
         position_ptr[] = offset + 68
-        new{T}(buffer, offset, position_ptr)
+        new{T,hasSbeHeader}(buffer, offset, position_ptr)
     end
 end
 
@@ -31,7 +32,7 @@ end
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
     if templateId(header) != UInt16(0xd) || schemaId(header) != UInt16(0x1)
-        error("Template id or schema id mismatch")
+        throw(DomainError("Template id or schema id mismatch"))
     end
     DiagonalMatrixMessageDecoder(buffer, offset + sbe_encoded_length(header), position_ptr,
         blockLength(header), version(header))
@@ -43,7 +44,7 @@ end
     templateId!(header, UInt16(0xd))
     schemaId!(header, UInt16(0x1))
     version!(header, UInt16(0x0))
-    DiagonalMatrixMessageEncoder(buffer, offset + sbe_encoded_length(header), position_ptr)
+    DiagonalMatrixMessageEncoder(buffer, offset + sbe_encoded_length(header), position_ptr, true)
 end
 sbe_buffer(m::DiagonalMatrixMessage) = m.buffer
 sbe_offset(m::DiagonalMatrixMessage) = m.offset
@@ -73,6 +74,13 @@ sbe_encoded_length(m::DiagonalMatrixMessage) = sbe_position(m) - m.offset
     sbe_encoded_length(skipper)
 end
 
+function Base.convert(::Type{AbstractArray{UInt8}}, m::DiagonalMatrixMessageEncoder{<:AbstractArray{UInt8},true})
+    return view(m.buffer, m.offset+1-sbe_encoded_length(MessageHeader):m.offset+sbe_encoded_length(m))
+end
+function Base.convert(::Type{AbstractArray{UInt8}}, m::DiagonalMatrixMessageEncoder{<:AbstractArray{UInt8},false})
+    return view(m.buffer, m.offset+1:m.offset+sbe_encoded_length(m))
+end
+
 function header_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
@@ -92,7 +100,7 @@ format_since_version(::DiagonalMatrixMessage) = UInt16(0x0)
 format_in_acting_version(m::DiagonalMatrixMessage) = sbe_acting_version(m) >= UInt16(0x0)
 format_encoding_offset(::DiagonalMatrixMessage) = 64
 format_encoding_length(::DiagonalMatrixMessage) = 1
-@inline function format(::Type{Integer}, m::DiagonalMatrixMessageDecoder)
+@inline function format(m::DiagonalMatrixMessageDecoder, ::Type{Integer})
     return decode_le(Int8, m.buffer, m.offset + 64)
 end
 @inline function format(m::DiagonalMatrixMessageDecoder)
@@ -109,7 +117,7 @@ indiciesFormat_since_version(::DiagonalMatrixMessage) = UInt16(0x0)
 indiciesFormat_in_acting_version(m::DiagonalMatrixMessage) = sbe_acting_version(m) >= UInt16(0x0)
 indiciesFormat_encoding_offset(::DiagonalMatrixMessage) = 65
 indiciesFormat_encoding_length(::DiagonalMatrixMessage) = 1
-@inline function indiciesFormat(::Type{Integer}, m::DiagonalMatrixMessageDecoder)
+@inline function indiciesFormat(m::DiagonalMatrixMessageDecoder, ::Type{Integer})
     return decode_le(Int8, m.buffer, m.offset + 65)
 end
 @inline function indiciesFormat(m::DiagonalMatrixMessageDecoder)
@@ -136,7 +144,7 @@ reserved1_eltype(::DiagonalMatrixMessage) = Int8
     return mappedarray(ltoh, reinterpret(Int8, view(m.buffer, m.offset+66+1:m.offset+66+sizeof(Int8)*2)))
 end
 
-@inline function reserved1(::Type{<:SVector},m::DiagonalMatrixMessageDecoder)
+@inline function reserved1(m::DiagonalMatrixMessageDecoder, ::Type{<:SVector})
     return mappedarray(ltoh, reinterpret(SVector{2,Int8}, view(m.buffer, m.offset+66+1:m.offset+66+sizeof(Int8)*2))[])
 end
 
@@ -163,11 +171,8 @@ dims_header_length(::DiagonalMatrixMessage) = 4
 end
 
 @inline function dims_length!(m::DiagonalMatrixMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
-        error("buffer too short for data length")
-    elseif n > 1073741824
-        error("data length too large for length type")
-    end
+    @boundscheck n > 1073741824 && throw(ArgumentError("length exceeds schema limit"))
+    @boundscheck checkbounds(m.buffer, sbe_position(m) + 4 + n)
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
@@ -185,14 +190,18 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-dims(::Type{<:AbstractString}, m::DiagonalMatrixMessageDecoder) = StringView(rstrip_nul(dims(m)))
-dims(::Type{<:Symbol}, m::DiagonalMatrixMessageDecoder) = Symbol(dims(StringView, m))
+@inline dims(m::DiagonalMatrixMessageDecoder, ::Type{AbstractArray{T}}) where {T<:Real} = reinterpret(T, dims(m))
+@inline dims(m::DiagonalMatrixMessageDecoder, ::Type{NTuple{N,T}}) where {N,T<:Real} = (x = reinterpret(T, dims(m)); ntuple(i -> x[i], Val(N)))
+@inline dims(m::DiagonalMatrixMessageDecoder, ::Type{T}) where {T<:AbstractString} = StringView(rstrip_nul(dims(m)))
+@inline dims(m::DiagonalMatrixMessageDecoder, ::Type{T}) where {T<:Symbol} = Symbol(dims(m, StringView))
+@inline dims(m::DiagonalMatrixMessageDecoder, ::Type{T}) where {T<:Real} = reinterpret(T, dims(m))[]
+@inline dims(m::DiagonalMatrixMessageDecoder, ::Type{T}) where {T<:Nothing} = (skip_dims!(m); nothing)
 
-@inline function dims!(m::DiagonalMatrixMessageEncoder; length::Int64)
-    dims_length!(m, length)
+@inline function dims_buffer!(m::DiagonalMatrixMessageEncoder, len)
+    dims_length!(m, len)
     pos = sbe_position(m) + 4
-    sbe_position!(m, pos + length)
-    return view(m.buffer, pos+1:pos+length)
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
 end
 
 @inline function dims!(m::DiagonalMatrixMessageEncoder, src::AbstractArray)
@@ -204,13 +213,13 @@ end
     copyto!(dest, reinterpret(UInt8, src))
 end
 
-@inline function dims!(m::DiagonalMatrixMessageEncoder, src::NTuple{N,T}) where {N,T}
+@inline function dims!(m::DiagonalMatrixMessageEncoder, src::NTuple)
     len = sizeof(src)
     dims_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+    copyto!(dest, reinterpret(NTuple{len,UInt8}, src))
 end
 
 @inline function dims!(m::DiagonalMatrixMessageEncoder, src::AbstractString)
@@ -222,7 +231,10 @@ end
     copyto!(dest, transcode(UInt8, src))
 end
 
-dims!(m::DiagonalMatrixMessageEncoder, src::Symbol) = dims!(m, to_string(src))
+@inline dims!(m::DiagonalMatrixMessageEncoder, src::Symbol) = dims!(m, to_string(src))
+@inline dims!(m::DiagonalMatrixMessageEncoder, src::StaticString) = dims!(m, Tuple(src))
+@inline dims!(m::DiagonalMatrixMessageEncoder, src::Real) = dims!(m, Tuple(src))
+@inline dims!(m::DiagonalMatrixMessageEncoder, ::Nothing) = dims_buffer!(m, 0)
 
 function values_meta_attribute(::DiagonalMatrixMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
@@ -239,11 +251,8 @@ values_header_length(::DiagonalMatrixMessage) = 4
 end
 
 @inline function values_length!(m::DiagonalMatrixMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
-        error("buffer too short for data length")
-    elseif n > 1073741824
-        error("data length too large for length type")
-    end
+    @boundscheck n > 1073741824 && throw(ArgumentError("length exceeds schema limit"))
+    @boundscheck checkbounds(m.buffer, sbe_position(m) + 4 + n)
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
@@ -261,14 +270,18 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-values(::Type{<:AbstractString}, m::DiagonalMatrixMessageDecoder) = StringView(rstrip_nul(values(m)))
-values(::Type{<:Symbol}, m::DiagonalMatrixMessageDecoder) = Symbol(values(StringView, m))
+@inline values(m::DiagonalMatrixMessageDecoder, ::Type{AbstractArray{T}}) where {T<:Real} = reinterpret(T, values(m))
+@inline values(m::DiagonalMatrixMessageDecoder, ::Type{NTuple{N,T}}) where {N,T<:Real} = (x = reinterpret(T, values(m)); ntuple(i -> x[i], Val(N)))
+@inline values(m::DiagonalMatrixMessageDecoder, ::Type{T}) where {T<:AbstractString} = StringView(rstrip_nul(values(m)))
+@inline values(m::DiagonalMatrixMessageDecoder, ::Type{T}) where {T<:Symbol} = Symbol(values(m, StringView))
+@inline values(m::DiagonalMatrixMessageDecoder, ::Type{T}) where {T<:Real} = reinterpret(T, values(m))[]
+@inline values(m::DiagonalMatrixMessageDecoder, ::Type{T}) where {T<:Nothing} = (skip_values!(m); nothing)
 
-@inline function values!(m::DiagonalMatrixMessageEncoder; length::Int64)
-    values_length!(m, length)
+@inline function values_buffer!(m::DiagonalMatrixMessageEncoder, len)
+    values_length!(m, len)
     pos = sbe_position(m) + 4
-    sbe_position!(m, pos + length)
-    return view(m.buffer, pos+1:pos+length)
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
 end
 
 @inline function values!(m::DiagonalMatrixMessageEncoder, src::AbstractArray)
@@ -280,13 +293,13 @@ end
     copyto!(dest, reinterpret(UInt8, src))
 end
 
-@inline function values!(m::DiagonalMatrixMessageEncoder, src::NTuple{N,T}) where {N,T}
+@inline function values!(m::DiagonalMatrixMessageEncoder, src::NTuple)
     len = sizeof(src)
     values_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+    copyto!(dest, reinterpret(NTuple{len,UInt8}, src))
 end
 
 @inline function values!(m::DiagonalMatrixMessageEncoder, src::AbstractString)
@@ -298,7 +311,10 @@ end
     copyto!(dest, transcode(UInt8, src))
 end
 
-values!(m::DiagonalMatrixMessageEncoder, src::Symbol) = values!(m, to_string(src))
+@inline values!(m::DiagonalMatrixMessageEncoder, src::Symbol) = values!(m, to_string(src))
+@inline values!(m::DiagonalMatrixMessageEncoder, src::StaticString) = values!(m, Tuple(src))
+@inline values!(m::DiagonalMatrixMessageEncoder, src::Real) = values!(m, Tuple(src))
+@inline values!(m::DiagonalMatrixMessageEncoder, ::Nothing) = values_buffer!(m, 0)
 
 function show(io::IO, m::DiagonalMatrixMessage{T}) where {T}
     println(io, "DiagonalMatrixMessage view over a type $T")

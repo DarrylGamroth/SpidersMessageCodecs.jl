@@ -17,13 +17,14 @@ struct TensorStreamHeaderMessageDecoder{T<:AbstractArray{UInt8}} <: TensorStream
     end
 end
 
-struct TensorStreamHeaderMessageEncoder{T<:AbstractArray{UInt8}} <: TensorStreamHeaderMessage{T}
+struct TensorStreamHeaderMessageEncoder{T<:AbstractArray{UInt8},HasSbeHeader} <: TensorStreamHeaderMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    function TensorStreamHeaderMessageEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64}) where {T}
+    function TensorStreamHeaderMessageEncoder(buffer::T, offset::Integer,
+        position_ptr::Ref{Int64}, hasSbeHeader::Bool=false) where {T}
         position_ptr[] = offset + 74
-        new{T}(buffer, offset, position_ptr)
+        new{T,hasSbeHeader}(buffer, offset, position_ptr)
     end
 end
 
@@ -31,7 +32,7 @@ end
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
     if templateId(header) != UInt16(0xe) || schemaId(header) != UInt16(0x1)
-        error("Template id or schema id mismatch")
+        throw(DomainError("Template id or schema id mismatch"))
     end
     TensorStreamHeaderMessageDecoder(buffer, offset + sbe_encoded_length(header), position_ptr,
         blockLength(header), version(header))
@@ -43,7 +44,7 @@ end
     templateId!(header, UInt16(0xe))
     schemaId!(header, UInt16(0x1))
     version!(header, UInt16(0x0))
-    TensorStreamHeaderMessageEncoder(buffer, offset + sbe_encoded_length(header), position_ptr)
+    TensorStreamHeaderMessageEncoder(buffer, offset + sbe_encoded_length(header), position_ptr, true)
 end
 sbe_buffer(m::TensorStreamHeaderMessage) = m.buffer
 sbe_offset(m::TensorStreamHeaderMessage) = m.offset
@@ -71,6 +72,13 @@ sbe_encoded_length(m::TensorStreamHeaderMessage) = sbe_position(m) - m.offset
         sbe_acting_block_length(m), sbe_acting_version(m))
     sbe_skip!(skipper)
     sbe_encoded_length(skipper)
+end
+
+function Base.convert(::Type{AbstractArray{UInt8}}, m::TensorStreamHeaderMessageEncoder{<:AbstractArray{UInt8},true})
+    return view(m.buffer, m.offset+1-sbe_encoded_length(MessageHeader):m.offset+sbe_encoded_length(m))
+end
+function Base.convert(::Type{AbstractArray{UInt8}}, m::TensorStreamHeaderMessageEncoder{<:AbstractArray{UInt8},false})
+    return view(m.buffer, m.offset+1:m.offset+sbe_encoded_length(m))
 end
 
 function header_meta_attribute(::TensorStreamHeaderMessage, meta_attribute)
@@ -110,7 +118,7 @@ format_since_version(::TensorStreamHeaderMessage) = UInt16(0x0)
 format_in_acting_version(m::TensorStreamHeaderMessage) = sbe_acting_version(m) >= UInt16(0x0)
 format_encoding_offset(::TensorStreamHeaderMessage) = 72
 format_encoding_length(::TensorStreamHeaderMessage) = 1
-@inline function format(::Type{Integer}, m::TensorStreamHeaderMessageDecoder)
+@inline function format(m::TensorStreamHeaderMessageDecoder, ::Type{Integer})
     return decode_le(Int8, m.buffer, m.offset + 72)
 end
 @inline function format(m::TensorStreamHeaderMessageDecoder)
@@ -118,27 +126,27 @@ end
 end
 @inline format!(m::TensorStreamHeaderMessageEncoder, value::Format.SbeEnum) = encode_le(Int8, m.buffer, m.offset + 72, Int8(value))
 
-function order_meta_attribute(::TensorStreamHeaderMessage, meta_attribute)
+function majorOrder_meta_attribute(::TensorStreamHeaderMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
-order_id(::TensorStreamHeaderMessage) = UInt16(0x4)
-order_since_version(::TensorStreamHeaderMessage) = UInt16(0x0)
-order_in_acting_version(m::TensorStreamHeaderMessage) = sbe_acting_version(m) >= UInt16(0x0)
-order_encoding_offset(::TensorStreamHeaderMessage) = 73
-order_encoding_length(::TensorStreamHeaderMessage) = 1
-@inline function order(::Type{Integer}, m::TensorStreamHeaderMessageDecoder)
+majorOrder_id(::TensorStreamHeaderMessage) = UInt16(0x4)
+majorOrder_since_version(::TensorStreamHeaderMessage) = UInt16(0x0)
+majorOrder_in_acting_version(m::TensorStreamHeaderMessage) = sbe_acting_version(m) >= UInt16(0x0)
+majorOrder_encoding_offset(::TensorStreamHeaderMessage) = 73
+majorOrder_encoding_length(::TensorStreamHeaderMessage) = 1
+@inline function majorOrder(m::TensorStreamHeaderMessageDecoder, ::Type{Integer})
     return decode_le(Int8, m.buffer, m.offset + 73)
 end
-@inline function order(m::TensorStreamHeaderMessageDecoder)
+@inline function majorOrder(m::TensorStreamHeaderMessageDecoder)
     return MajorOrder.SbeEnum(decode_le(Int8, m.buffer, m.offset + 73))
 end
-@inline order!(m::TensorStreamHeaderMessageEncoder, value::MajorOrder.SbeEnum) = encode_le(Int8, m.buffer, m.offset + 73, Int8(value))
+@inline majorOrder!(m::TensorStreamHeaderMessageEncoder, value::MajorOrder.SbeEnum) = encode_le(Int8, m.buffer, m.offset + 73, Int8(value))
 
-export Slice, SliceDecoder, SliceEncoder
-abstract type Slice{T} end
+export TensorStreamHeaderMessageSlice, TensorStreamHeaderMessageSliceDecoder, TensorStreamHeaderMessageSliceEncoder
+abstract type TensorStreamHeaderMessageSlice{T} end
 
-mutable struct SliceDecoder{T<:AbstractArray{UInt8}} <: Slice{T}
+mutable struct TensorStreamHeaderMessageSliceDecoder{T<:AbstractArray{UInt8}} <: TensorStreamHeaderMessageSlice{T}
     const buffer::T
     offset::Int64
     const position_ptr::Base.RefValue{Int64}
@@ -146,34 +154,34 @@ mutable struct SliceDecoder{T<:AbstractArray{UInt8}} <: Slice{T}
     const acting_version::UInt16
     const count::UInt16
     index::UInt16
-    function SliceDecoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
+    function TensorStreamHeaderMessageSliceDecoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
         block_length::Integer, acting_version::Integer,
         count::Integer, index::Integer) where {T}
         new{T}(buffer, offset, position_ptr, block_length, acting_version, count, index)
     end
 end
 
-mutable struct SliceEncoder{T<:AbstractArray{UInt8}} <: Slice{T}
+mutable struct TensorStreamHeaderMessageSliceEncoder{T<:AbstractArray{UInt8}} <: TensorStreamHeaderMessageSlice{T}
     const buffer::T
     offset::Int64
     const position_ptr::Base.RefValue{Int64}
     const initial_position::Int64
     const count::UInt16
     index::UInt16
-    function SliceEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
+    function TensorStreamHeaderMessageSliceEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
         initial_position::Int64, count::Integer, index::Integer) where {T}
         new{T}(buffer, offset, position_ptr, initial_position, count, index)
     end
 end
 
-@inline function SliceDecoder(buffer, position_ptr, acting_version)
+@inline function TensorStreamHeaderMessageSliceDecoder(buffer, position_ptr, acting_version)
     dimensions = GroupSizeEncoding(buffer, position_ptr[])
     position_ptr[] += 4
-    return SliceDecoder(buffer, 0, position_ptr, blockLength(dimensions),
+    return TensorStreamHeaderMessageSliceDecoder(buffer, 0, position_ptr, blockLength(dimensions),
         acting_version, numInGroup(dimensions), 0)
 end
 
-@inline function SliceEncoder(buffer, count, position_ptr)
+@inline function TensorStreamHeaderMessageSliceEncoder(buffer, count, position_ptr)
     if count > 65534
         error("count outside of allowed range")
     end
@@ -182,18 +190,19 @@ end
     numInGroup!(dimensions, count)
     initial_position = position_ptr[]
     position_ptr[] += 4
-    return SliceEncoder(buffer, 0, position_ptr, initial_position, count, 0)
+    return TensorStreamHeaderMessageSliceEncoder(buffer, 0, position_ptr, initial_position, count, 0)
 end
 
-sbe_header_size(::Slice) = 4
-sbe_block_length(::Slice) = UInt16(0x8)
-sbe_acting_block_length(g::SliceDecoder) = g.block_length
-sbe_acting_block_length(g::SliceEncoder) = UInt16(0x8)
-sbe_acting_version(g::SliceDecoder) = g.acting_version
-sbe_position(g::Slice) = g.position_ptr[]
-@inline sbe_position!(g::Slice, position) = g.position_ptr[] = position
-sbe_position_ptr(g::Slice) = g.position_ptr
-@inline function next!(g::Slice)
+sbe_header_size(::TensorStreamHeaderMessageSlice) = 4
+sbe_block_length(::TensorStreamHeaderMessageSlice) = UInt16(0x8)
+sbe_acting_block_length(g::TensorStreamHeaderMessageSliceDecoder) = g.block_length
+sbe_acting_block_length(g::TensorStreamHeaderMessageSliceEncoder) = UInt16(0x8)
+sbe_acting_version(g::TensorStreamHeaderMessageSliceDecoder) = g.acting_version
+sbe_acting_version(::TensorStreamHeaderMessageSliceEncoder) = UInt16(0x0)
+sbe_position(g::TensorStreamHeaderMessageSlice) = g.position_ptr[]
+@inline sbe_position!(g::TensorStreamHeaderMessageSlice, position) = g.position_ptr[] = position
+sbe_position_ptr(g::TensorStreamHeaderMessageSlice) = g.position_ptr
+@inline function next!(g::TensorStreamHeaderMessageSlice)
     if g.index >= g.count
         error("index >= count")
     end
@@ -202,7 +211,7 @@ sbe_position_ptr(g::Slice) = g.position_ptr
     g.index += 1
     return g
 end
-function Base.iterate(g::Slice, state=nothing)
+function Base.iterate(g::TensorStreamHeaderMessageSlice, state=nothing)
     if g.index < g.count
         g.offset = sbe_position(g)
         sbe_position!(g, g.offset + sbe_acting_block_length(g))
@@ -212,55 +221,55 @@ function Base.iterate(g::Slice, state=nothing)
         return nothing
     end
 end
-Base.eltype(::Type{<:Slice}) = Slice
-Base.isdone(g::Slice, state=nothing) = g.index >= g.count
-Base.length(g::Slice) = g.count
+Base.eltype(::Type{<:TensorStreamHeaderMessageSlice}) = TensorStreamHeaderMessageSlice
+Base.isdone(g::TensorStreamHeaderMessageSlice, state=nothing) = g.index >= g.count
+Base.length(g::TensorStreamHeaderMessageSlice) = g.count
 
-function reset_count_to_index!(g::SliceEncoder)
+function reset_count_to_index!(g::TensorStreamHeaderMessageSliceEncoder)
     g.count = g.index
     dimensions = GroupSizeEncoding(g.buffer, g.initial_position)
     numInGroup!(dimensions, g.count)
     return g.count
 end
 
-function start_meta_attribute(::Slice, meta_attribute)
+function start_meta_attribute(::TensorStreamHeaderMessageSlice, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
-start_id(::Slice) = UInt16(0x1)
-start_since_version(::Slice) = UInt16(0x0)
-start_in_acting_version(m::Slice) = sbe_acting_version(m) >= UInt16(0x0)
-start_encoding_offset(::Slice) = 0
-start_null_value(::Slice) = Int32(-2147483648)
-start_min_value(::Slice) = Int32(-2147483647)
-start_max_value(::Slice) = Int32(2147483647)
-start_encoding_length(::Slice) = 4
+start_id(::TensorStreamHeaderMessageSlice) = UInt16(0x1)
+start_since_version(::TensorStreamHeaderMessageSlice) = UInt16(0x0)
+start_in_acting_version(m::TensorStreamHeaderMessageSlice) = sbe_acting_version(m) >= UInt16(0x0)
+start_encoding_offset(::TensorStreamHeaderMessageSlice) = 0
+start_null_value(::TensorStreamHeaderMessageSlice) = Int32(-2147483648)
+start_min_value(::TensorStreamHeaderMessageSlice) = Int32(-2147483647)
+start_max_value(::TensorStreamHeaderMessageSlice) = Int32(2147483647)
+start_encoding_length(::TensorStreamHeaderMessageSlice) = 4
 
-@inline function start(m::SliceDecoder)
+@inline function start(m::TensorStreamHeaderMessageSliceDecoder)
     return decode_le(Int32, m.buffer, m.offset + 0)
 end
-@inline start!(m::SliceEncoder, value) = encode_le(Int32, m.buffer, m.offset + 0, value)
+@inline start!(m::TensorStreamHeaderMessageSliceEncoder, value) = encode_le(Int32, m.buffer, m.offset + 0, value)
 
-function stop_meta_attribute(::Slice, meta_attribute)
+function stop_meta_attribute(::TensorStreamHeaderMessageSlice, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
-stop_id(::Slice) = UInt16(0x2)
-stop_since_version(::Slice) = UInt16(0x0)
-stop_in_acting_version(m::Slice) = sbe_acting_version(m) >= UInt16(0x0)
-stop_encoding_offset(::Slice) = 4
-stop_null_value(::Slice) = Int32(-2147483648)
-stop_min_value(::Slice) = Int32(-2147483647)
-stop_max_value(::Slice) = Int32(2147483647)
-stop_encoding_length(::Slice) = 4
+stop_id(::TensorStreamHeaderMessageSlice) = UInt16(0x2)
+stop_since_version(::TensorStreamHeaderMessageSlice) = UInt16(0x0)
+stop_in_acting_version(m::TensorStreamHeaderMessageSlice) = sbe_acting_version(m) >= UInt16(0x0)
+stop_encoding_offset(::TensorStreamHeaderMessageSlice) = 4
+stop_null_value(::TensorStreamHeaderMessageSlice) = Int32(-2147483648)
+stop_min_value(::TensorStreamHeaderMessageSlice) = Int32(-2147483647)
+stop_max_value(::TensorStreamHeaderMessageSlice) = Int32(2147483647)
+stop_encoding_length(::TensorStreamHeaderMessageSlice) = 4
 
-@inline function stop(m::SliceDecoder)
+@inline function stop(m::TensorStreamHeaderMessageSliceDecoder)
     return decode_le(Int32, m.buffer, m.offset + 4)
 end
-@inline stop!(m::SliceEncoder, value) = encode_le(Int32, m.buffer, m.offset + 4, value)
+@inline stop!(m::TensorStreamHeaderMessageSliceEncoder, value) = encode_le(Int32, m.buffer, m.offset + 4, value)
 
-function show(io::IO, writer::Slice{T}) where {T}
-    println(io, "Slice view over a type $T")
+function show(io::IO, writer::TensorStreamHeaderMessageSlice{T}) where {T}
+    println(io, "TensorStreamHeaderMessageSlice view over a type $T")
     print(io, "start: ")
     print(io, start(writer))
 
@@ -270,27 +279,27 @@ function show(io::IO, writer::Slice{T}) where {T}
 
 end
 
-@inline function sbe_skip!(m::SliceDecoder)
+@inline function sbe_skip!(m::TensorStreamHeaderMessageSliceDecoder)
     
     return
 end
 
 @inline function slice(m::TensorStreamHeaderMessage)
-    return SliceDecoder(m.buffer, sbe_position_ptr(m), sbe_acting_version(m))
+    return TensorStreamHeaderMessageSliceDecoder(m.buffer, sbe_position_ptr(m), sbe_acting_version(m))
 end
 
 @inline function slice!(m::TensorStreamHeaderMessage, count)
-    return SliceEncoder(m.buffer, count, sbe_position_ptr(m))
+    return TensorStreamHeaderMessageSliceEncoder(m.buffer, count, sbe_position_ptr(m))
 end
 slice_group_count!(m::TensorStreamHeaderMessageEncoder, count) = slice!(m, count)
 slice_id(::TensorStreamHeaderMessage) = 11
 slice_since_version(::TensorStreamHeaderMessage) = 0
 slice_in_acting_version(m::TensorStreamHeaderMessage) = sbe_acting_version(m) >= 0
 
-export Metadata, MetadataDecoder, MetadataEncoder
-abstract type Metadata{T} end
+export TensorStreamHeaderMessageMetadata, TensorStreamHeaderMessageMetadataDecoder, TensorStreamHeaderMessageMetadataEncoder
+abstract type TensorStreamHeaderMessageMetadata{T} end
 
-mutable struct MetadataDecoder{T<:AbstractArray{UInt8}} <: Metadata{T}
+mutable struct TensorStreamHeaderMessageMetadataDecoder{T<:AbstractArray{UInt8}} <: TensorStreamHeaderMessageMetadata{T}
     const buffer::T
     offset::Int64
     const position_ptr::Base.RefValue{Int64}
@@ -298,54 +307,55 @@ mutable struct MetadataDecoder{T<:AbstractArray{UInt8}} <: Metadata{T}
     const acting_version::UInt16
     const count::UInt16
     index::UInt16
-    function MetadataDecoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
+    function TensorStreamHeaderMessageMetadataDecoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
         block_length::Integer, acting_version::Integer,
         count::Integer, index::Integer) where {T}
         new{T}(buffer, offset, position_ptr, block_length, acting_version, count, index)
     end
 end
 
-mutable struct MetadataEncoder{T<:AbstractArray{UInt8}} <: Metadata{T}
+mutable struct TensorStreamHeaderMessageMetadataEncoder{T<:AbstractArray{UInt8}} <: TensorStreamHeaderMessageMetadata{T}
     const buffer::T
     offset::Int64
     const position_ptr::Base.RefValue{Int64}
     const initial_position::Int64
     const count::UInt16
     index::UInt16
-    function MetadataEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
+    function TensorStreamHeaderMessageMetadataEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64},
         initial_position::Int64, count::Integer, index::Integer) where {T}
         new{T}(buffer, offset, position_ptr, initial_position, count, index)
     end
 end
 
-@inline function MetadataDecoder(buffer, position_ptr, acting_version)
+@inline function TensorStreamHeaderMessageMetadataDecoder(buffer, position_ptr, acting_version)
     dimensions = GroupSizeEncoding(buffer, position_ptr[])
     position_ptr[] += 4
-    return MetadataDecoder(buffer, 0, position_ptr, blockLength(dimensions),
+    return TensorStreamHeaderMessageMetadataDecoder(buffer, 0, position_ptr, blockLength(dimensions),
         acting_version, numInGroup(dimensions), 0)
 end
 
-@inline function MetadataEncoder(buffer, count, position_ptr)
+@inline function TensorStreamHeaderMessageMetadataEncoder(buffer, count, position_ptr)
     if count > 65534
         error("count outside of allowed range")
     end
     dimensions = GroupSizeEncoding(buffer, position_ptr[])
-    blockLength!(dimensions, UInt16(0x5))
+    blockLength!(dimensions, UInt16(0x1))
     numInGroup!(dimensions, count)
     initial_position = position_ptr[]
     position_ptr[] += 4
-    return MetadataEncoder(buffer, 0, position_ptr, initial_position, count, 0)
+    return TensorStreamHeaderMessageMetadataEncoder(buffer, 0, position_ptr, initial_position, count, 0)
 end
 
-sbe_header_size(::Metadata) = 4
-sbe_block_length(::Metadata) = UInt16(0x5)
-sbe_acting_block_length(g::MetadataDecoder) = g.block_length
-sbe_acting_block_length(g::MetadataEncoder) = UInt16(0x5)
-sbe_acting_version(g::MetadataDecoder) = g.acting_version
-sbe_position(g::Metadata) = g.position_ptr[]
-@inline sbe_position!(g::Metadata, position) = g.position_ptr[] = position
-sbe_position_ptr(g::Metadata) = g.position_ptr
-@inline function next!(g::Metadata)
+sbe_header_size(::TensorStreamHeaderMessageMetadata) = 4
+sbe_block_length(::TensorStreamHeaderMessageMetadata) = UInt16(0x1)
+sbe_acting_block_length(g::TensorStreamHeaderMessageMetadataDecoder) = g.block_length
+sbe_acting_block_length(g::TensorStreamHeaderMessageMetadataEncoder) = UInt16(0x1)
+sbe_acting_version(g::TensorStreamHeaderMessageMetadataDecoder) = g.acting_version
+sbe_acting_version(::TensorStreamHeaderMessageMetadataEncoder) = UInt16(0x0)
+sbe_position(g::TensorStreamHeaderMessageMetadata) = g.position_ptr[]
+@inline sbe_position!(g::TensorStreamHeaderMessageMetadata, position) = g.position_ptr[] = position
+sbe_position_ptr(g::TensorStreamHeaderMessageMetadata) = g.position_ptr
+@inline function next!(g::TensorStreamHeaderMessageMetadata)
     if g.index >= g.count
         error("index >= count")
     end
@@ -354,7 +364,7 @@ sbe_position_ptr(g::Metadata) = g.position_ptr
     g.index += 1
     return g
 end
-function Base.iterate(g::Metadata, state=nothing)
+function Base.iterate(g::TensorStreamHeaderMessageMetadata, state=nothing)
     if g.index < g.count
         g.offset = sbe_position(g)
         sbe_position!(g, g.offset + sbe_acting_block_length(g))
@@ -364,76 +374,223 @@ function Base.iterate(g::Metadata, state=nothing)
         return nothing
     end
 end
-Base.eltype(::Type{<:Metadata}) = Metadata
-Base.isdone(g::Metadata, state=nothing) = g.index >= g.count
-Base.length(g::Metadata) = g.count
+Base.eltype(::Type{<:TensorStreamHeaderMessageMetadata}) = TensorStreamHeaderMessageMetadata
+Base.isdone(g::TensorStreamHeaderMessageMetadata, state=nothing) = g.index >= g.count
+Base.length(g::TensorStreamHeaderMessageMetadata) = g.count
 
-function reset_count_to_index!(g::MetadataEncoder)
+function reset_count_to_index!(g::TensorStreamHeaderMessageMetadataEncoder)
     g.count = g.index
     dimensions = GroupSizeEncoding(g.buffer, g.initial_position)
     numInGroup!(dimensions, g.count)
     return g.count
 end
 
-function format_meta_attribute(::Metadata, meta_attribute)
+function format_meta_attribute(::TensorStreamHeaderMessageMetadata, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
-format_id(::Metadata) = UInt16(0x1)
-format_since_version(::Metadata) = UInt16(0x0)
-format_in_acting_version(m::Metadata) = sbe_acting_version(m) >= UInt16(0x0)
-format_encoding_offset(::Metadata) = 0
-format_encoding_length(::Metadata) = 1
-@inline function format(::Type{Integer}, m::MetadataDecoder)
+format_id(::TensorStreamHeaderMessageMetadata) = UInt16(0x1)
+format_since_version(::TensorStreamHeaderMessageMetadata) = UInt16(0x0)
+format_in_acting_version(m::TensorStreamHeaderMessageMetadata) = sbe_acting_version(m) >= UInt16(0x0)
+format_encoding_offset(::TensorStreamHeaderMessageMetadata) = 0
+format_encoding_length(::TensorStreamHeaderMessageMetadata) = 1
+@inline function format(m::TensorStreamHeaderMessageMetadataDecoder, ::Type{Integer})
     return decode_le(Int8, m.buffer, m.offset + 0)
 end
-@inline function format(m::MetadataDecoder)
+@inline function format(m::TensorStreamHeaderMessageMetadataDecoder)
     return Format.SbeEnum(decode_le(Int8, m.buffer, m.offset + 0))
 end
-@inline format!(m::MetadataEncoder, value::Format.SbeEnum) = encode_le(Int8, m.buffer, m.offset + 0, Int8(value))
+@inline format!(m::TensorStreamHeaderMessageMetadataEncoder, value::Format.SbeEnum) = encode_le(Int8, m.buffer, m.offset + 0, Int8(value))
 
-function key_meta_attribute(::Metadata, meta_attribute)
+function key_meta_attribute(::TensorStreamHeaderMessageMetadata, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
-key_id(::Metadata) = UInt16(0x3)
-key_since_version(::Metadata) = UInt16(0x0)
-key_in_acting_version(m::Metadata) = sbe_acting_version(m) >= UInt16(0x0)
-key_encoding_offset(::Metadata) = 1
-key(m::Metadata) = VarStringEncoding(m.buffer, m.offset + 1, sbe_acting_version(m))
 
-function value_meta_attribute(::Metadata, meta_attribute)
+key_character_encoding(::TensorStreamHeaderMessageMetadata) = "UTF-8"
+key_in_acting_version(m::TensorStreamHeaderMessageMetadata) = sbe_acting_version(m) >= 0
+key_id(::TensorStreamHeaderMessageMetadata) = 3
+key_header_length(::TensorStreamHeaderMessageMetadata) = 4
+
+@inline function key_length(m::TensorStreamHeaderMessageMetadata)
+    return decode_le(UInt32, m.buffer, sbe_position(m))
+end
+
+@inline function key_length!(m::TensorStreamHeaderMessageMetadataEncoder, n)
+    @boundscheck n > 1073741824 && throw(ArgumentError("length exceeds schema limit"))
+    @boundscheck checkbounds(m.buffer, sbe_position(m) + 4 + n)
+    return encode_le(UInt32, m.buffer, sbe_position(m), n)
+end
+
+@inline function skip_key!(m::TensorStreamHeaderMessageMetadataDecoder)
+    len = key_length(m)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    return len
+end
+
+@inline function key(m::TensorStreamHeaderMessageMetadataDecoder)
+    len = key_length(m)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
+end
+
+@inline key(m::TensorStreamHeaderMessageMetadataDecoder, ::Type{AbstractArray{T}}) where {T<:Real} = reinterpret(T, key(m))
+@inline key(m::TensorStreamHeaderMessageMetadataDecoder, ::Type{NTuple{N,T}}) where {N,T<:Real} = (x = reinterpret(T, key(m)); ntuple(i -> x[i], Val(N)))
+@inline key(m::TensorStreamHeaderMessageMetadataDecoder, ::Type{T}) where {T<:AbstractString} = StringView(rstrip_nul(key(m)))
+@inline key(m::TensorStreamHeaderMessageMetadataDecoder, ::Type{T}) where {T<:Symbol} = Symbol(key(m, StringView))
+@inline key(m::TensorStreamHeaderMessageMetadataDecoder, ::Type{T}) where {T<:Real} = reinterpret(T, key(m))[]
+@inline key(m::TensorStreamHeaderMessageMetadataDecoder, ::Type{T}) where {T<:Nothing} = (skip_key!(m); nothing)
+
+@inline function key_buffer!(m::TensorStreamHeaderMessageMetadataEncoder, len)
+    key_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
+end
+
+@inline function key!(m::TensorStreamHeaderMessageMetadataEncoder, src::AbstractArray)
+    len = sizeof(src)
+    key_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(UInt8, src))
+end
+
+@inline function key!(m::TensorStreamHeaderMessageMetadataEncoder, src::NTuple)
+    len = sizeof(src)
+    key_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{len,UInt8}, src))
+end
+
+@inline function key!(m::TensorStreamHeaderMessageMetadataEncoder, src::AbstractString)
+    len = sizeof(src)
+    key_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+@inline key!(m::TensorStreamHeaderMessageMetadataEncoder, src::Symbol) = key!(m, to_string(src))
+@inline key!(m::TensorStreamHeaderMessageMetadataEncoder, src::StaticString) = key!(m, Tuple(src))
+@inline key!(m::TensorStreamHeaderMessageMetadataEncoder, src::Real) = key!(m, Tuple(src))
+@inline key!(m::TensorStreamHeaderMessageMetadataEncoder, ::Nothing) = key_buffer!(m, 0)
+
+function value_meta_attribute(::TensorStreamHeaderMessageMetadata, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
-value_id(::Metadata) = UInt16(0x4)
-value_since_version(::Metadata) = UInt16(0x0)
-value_in_acting_version(m::Metadata) = sbe_acting_version(m) >= UInt16(0x0)
-value_encoding_offset(::Metadata) = 5
-value(m::Metadata) = VarDataEncoding(m.buffer, m.offset + 5, sbe_acting_version(m))
 
-function show(io::IO, writer::Metadata{T}) where {T}
-    println(io, "Metadata view over a type $T")
+value_character_encoding(::TensorStreamHeaderMessageMetadata) = "null"
+value_in_acting_version(m::TensorStreamHeaderMessageMetadata) = sbe_acting_version(m) >= 0
+value_id(::TensorStreamHeaderMessageMetadata) = 4
+value_header_length(::TensorStreamHeaderMessageMetadata) = 4
+
+@inline function value_length(m::TensorStreamHeaderMessageMetadata)
+    return decode_le(UInt32, m.buffer, sbe_position(m))
+end
+
+@inline function value_length!(m::TensorStreamHeaderMessageMetadataEncoder, n)
+    @boundscheck n > 1073741824 && throw(ArgumentError("length exceeds schema limit"))
+    @boundscheck checkbounds(m.buffer, sbe_position(m) + 4 + n)
+    return encode_le(UInt32, m.buffer, sbe_position(m), n)
+end
+
+@inline function skip_value!(m::TensorStreamHeaderMessageMetadataDecoder)
+    len = value_length(m)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    return len
+end
+
+@inline function value(m::TensorStreamHeaderMessageMetadataDecoder)
+    len = value_length(m)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
+end
+
+@inline value(m::TensorStreamHeaderMessageMetadataDecoder, ::Type{AbstractArray{T}}) where {T<:Real} = reinterpret(T, value(m))
+@inline value(m::TensorStreamHeaderMessageMetadataDecoder, ::Type{NTuple{N,T}}) where {N,T<:Real} = (x = reinterpret(T, value(m)); ntuple(i -> x[i], Val(N)))
+@inline value(m::TensorStreamHeaderMessageMetadataDecoder, ::Type{T}) where {T<:AbstractString} = StringView(rstrip_nul(value(m)))
+@inline value(m::TensorStreamHeaderMessageMetadataDecoder, ::Type{T}) where {T<:Symbol} = Symbol(value(m, StringView))
+@inline value(m::TensorStreamHeaderMessageMetadataDecoder, ::Type{T}) where {T<:Real} = reinterpret(T, value(m))[]
+@inline value(m::TensorStreamHeaderMessageMetadataDecoder, ::Type{T}) where {T<:Nothing} = (skip_value!(m); nothing)
+
+@inline function value_buffer!(m::TensorStreamHeaderMessageMetadataEncoder, len)
+    value_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
+end
+
+@inline function value!(m::TensorStreamHeaderMessageMetadataEncoder, src::AbstractArray)
+    len = sizeof(src)
+    value_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(UInt8, src))
+end
+
+@inline function value!(m::TensorStreamHeaderMessageMetadataEncoder, src::NTuple)
+    len = sizeof(src)
+    value_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, reinterpret(NTuple{len,UInt8}, src))
+end
+
+@inline function value!(m::TensorStreamHeaderMessageMetadataEncoder, src::AbstractString)
+    len = sizeof(src)
+    value_length!(m, len)
+    pos = sbe_position(m) + 4
+    sbe_position!(m, pos + len)
+    dest = view(m.buffer, pos+1:pos+len)
+    copyto!(dest, transcode(UInt8, src))
+end
+
+@inline value!(m::TensorStreamHeaderMessageMetadataEncoder, src::Symbol) = value!(m, to_string(src))
+@inline value!(m::TensorStreamHeaderMessageMetadataEncoder, src::StaticString) = value!(m, Tuple(src))
+@inline value!(m::TensorStreamHeaderMessageMetadataEncoder, src::Real) = value!(m, Tuple(src))
+@inline value!(m::TensorStreamHeaderMessageMetadataEncoder, ::Nothing) = value_buffer!(m, 0)
+
+function show(io::IO, writer::TensorStreamHeaderMessageMetadata{T}) where {T}
+    println(io, "TensorStreamHeaderMessageMetadata view over a type $T")
     print(io, "format: ")
     print(io, format(writer))
 
     println(io)
     print(io, "key: ")
-    show(io, key(writer))
+    print(io, key(writer, StringView))
+
+    println(io)
+    print(io, "value: ")
+    print(io, skip_value!(writer))
+    print(io, " bytes of raw data")
 
 end
 
-@inline function sbe_skip!(m::MetadataDecoder)
+@inline function sbe_skip!(m::TensorStreamHeaderMessageMetadataDecoder)
     
+    skip_key!(m)
+    skip_value!(m)
     return
 end
 
 @inline function metadata(m::TensorStreamHeaderMessage)
-    return MetadataDecoder(m.buffer, sbe_position_ptr(m), sbe_acting_version(m))
+    return TensorStreamHeaderMessageMetadataDecoder(m.buffer, sbe_position_ptr(m), sbe_acting_version(m))
 end
 
 @inline function metadata!(m::TensorStreamHeaderMessage, count)
-    return MetadataEncoder(m.buffer, count, sbe_position_ptr(m))
+    return TensorStreamHeaderMessageMetadataEncoder(m.buffer, count, sbe_position_ptr(m))
 end
 metadata_group_count!(m::TensorStreamHeaderMessageEncoder, count) = metadata!(m, count)
 metadata_id(::TensorStreamHeaderMessage) = 12
@@ -455,11 +612,8 @@ dims_header_length(::TensorStreamHeaderMessage) = 4
 end
 
 @inline function dims_length!(m::TensorStreamHeaderMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
-        error("buffer too short for data length")
-    elseif n > 1073741824
-        error("data length too large for length type")
-    end
+    @boundscheck n > 1073741824 && throw(ArgumentError("length exceeds schema limit"))
+    @boundscheck checkbounds(m.buffer, sbe_position(m) + 4 + n)
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
@@ -477,14 +631,18 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-dims(::Type{<:AbstractString}, m::TensorStreamHeaderMessageDecoder) = StringView(rstrip_nul(dims(m)))
-dims(::Type{<:Symbol}, m::TensorStreamHeaderMessageDecoder) = Symbol(dims(StringView, m))
+@inline dims(m::TensorStreamHeaderMessageDecoder, ::Type{AbstractArray{T}}) where {T<:Real} = reinterpret(T, dims(m))
+@inline dims(m::TensorStreamHeaderMessageDecoder, ::Type{NTuple{N,T}}) where {N,T<:Real} = (x = reinterpret(T, dims(m)); ntuple(i -> x[i], Val(N)))
+@inline dims(m::TensorStreamHeaderMessageDecoder, ::Type{T}) where {T<:AbstractString} = StringView(rstrip_nul(dims(m)))
+@inline dims(m::TensorStreamHeaderMessageDecoder, ::Type{T}) where {T<:Symbol} = Symbol(dims(m, StringView))
+@inline dims(m::TensorStreamHeaderMessageDecoder, ::Type{T}) where {T<:Real} = reinterpret(T, dims(m))[]
+@inline dims(m::TensorStreamHeaderMessageDecoder, ::Type{T}) where {T<:Nothing} = (skip_dims!(m); nothing)
 
-@inline function dims!(m::TensorStreamHeaderMessageEncoder; length::Int64)
-    dims_length!(m, length)
+@inline function dims_buffer!(m::TensorStreamHeaderMessageEncoder, len)
+    dims_length!(m, len)
     pos = sbe_position(m) + 4
-    sbe_position!(m, pos + length)
-    return view(m.buffer, pos+1:pos+length)
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
 end
 
 @inline function dims!(m::TensorStreamHeaderMessageEncoder, src::AbstractArray)
@@ -496,13 +654,13 @@ end
     copyto!(dest, reinterpret(UInt8, src))
 end
 
-@inline function dims!(m::TensorStreamHeaderMessageEncoder, src::NTuple{N,T}) where {N,T}
+@inline function dims!(m::TensorStreamHeaderMessageEncoder, src::NTuple)
     len = sizeof(src)
     dims_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+    copyto!(dest, reinterpret(NTuple{len,UInt8}, src))
 end
 
 @inline function dims!(m::TensorStreamHeaderMessageEncoder, src::AbstractString)
@@ -514,7 +672,10 @@ end
     copyto!(dest, transcode(UInt8, src))
 end
 
-dims!(m::TensorStreamHeaderMessageEncoder, src::Symbol) = dims!(m, to_string(src))
+@inline dims!(m::TensorStreamHeaderMessageEncoder, src::Symbol) = dims!(m, to_string(src))
+@inline dims!(m::TensorStreamHeaderMessageEncoder, src::StaticString) = dims!(m, Tuple(src))
+@inline dims!(m::TensorStreamHeaderMessageEncoder, src::Real) = dims!(m, Tuple(src))
+@inline dims!(m::TensorStreamHeaderMessageEncoder, ::Nothing) = dims_buffer!(m, 0)
 
 function show(io::IO, m::TensorStreamHeaderMessage{T}) where {T}
     println(io, "TensorStreamHeaderMessage view over a type $T")
@@ -537,8 +698,8 @@ function show(io::IO, m::TensorStreamHeaderMessage{T}) where {T}
     print(io, format(writer))
 
     println(io)
-    print(io, "order: ")
-    print(io, order(writer))
+    print(io, "majorOrder: ")
+    print(io, majorOrder(writer))
 
     println(io)
     println(io, "Slice:")

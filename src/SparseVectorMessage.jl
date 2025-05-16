@@ -17,13 +17,14 @@ struct SparseVectorMessageDecoder{T<:AbstractArray{UInt8}} <: SparseVectorMessag
     end
 end
 
-struct SparseVectorMessageEncoder{T<:AbstractArray{UInt8}} <: SparseVectorMessage{T}
+struct SparseVectorMessageEncoder{T<:AbstractArray{UInt8},HasSbeHeader} <: SparseVectorMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    function SparseVectorMessageEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64}) where {T}
+    function SparseVectorMessageEncoder(buffer::T, offset::Integer,
+        position_ptr::Ref{Int64}, hasSbeHeader::Bool=false) where {T}
         position_ptr[] = offset + 76
-        new{T}(buffer, offset, position_ptr)
+        new{T,hasSbeHeader}(buffer, offset, position_ptr)
     end
 end
 
@@ -31,7 +32,7 @@ end
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
     if templateId(header) != UInt16(0xc) || schemaId(header) != UInt16(0x1)
-        error("Template id or schema id mismatch")
+        throw(DomainError("Template id or schema id mismatch"))
     end
     SparseVectorMessageDecoder(buffer, offset + sbe_encoded_length(header), position_ptr,
         blockLength(header), version(header))
@@ -43,7 +44,7 @@ end
     templateId!(header, UInt16(0xc))
     schemaId!(header, UInt16(0x1))
     version!(header, UInt16(0x0))
-    SparseVectorMessageEncoder(buffer, offset + sbe_encoded_length(header), position_ptr)
+    SparseVectorMessageEncoder(buffer, offset + sbe_encoded_length(header), position_ptr, true)
 end
 sbe_buffer(m::SparseVectorMessage) = m.buffer
 sbe_offset(m::SparseVectorMessage) = m.offset
@@ -73,6 +74,13 @@ sbe_encoded_length(m::SparseVectorMessage) = sbe_position(m) - m.offset
     sbe_encoded_length(skipper)
 end
 
+function Base.convert(::Type{AbstractArray{UInt8}}, m::SparseVectorMessageEncoder{<:AbstractArray{UInt8},true})
+    return view(m.buffer, m.offset+1-sbe_encoded_length(MessageHeader):m.offset+sbe_encoded_length(m))
+end
+function Base.convert(::Type{AbstractArray{UInt8}}, m::SparseVectorMessageEncoder{<:AbstractArray{UInt8},false})
+    return view(m.buffer, m.offset+1:m.offset+sbe_encoded_length(m))
+end
+
 function header_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
@@ -92,7 +100,7 @@ format_since_version(::SparseVectorMessage) = UInt16(0x0)
 format_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= UInt16(0x0)
 format_encoding_offset(::SparseVectorMessage) = 64
 format_encoding_length(::SparseVectorMessage) = 1
-@inline function format(::Type{Integer}, m::SparseVectorMessageDecoder)
+@inline function format(m::SparseVectorMessageDecoder, ::Type{Integer})
     return decode_le(Int8, m.buffer, m.offset + 64)
 end
 @inline function format(m::SparseVectorMessageDecoder)
@@ -109,7 +117,7 @@ indiciesFormat_since_version(::SparseVectorMessage) = UInt16(0x0)
 indiciesFormat_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= UInt16(0x0)
 indiciesFormat_encoding_offset(::SparseVectorMessage) = 65
 indiciesFormat_encoding_length(::SparseVectorMessage) = 1
-@inline function indiciesFormat(::Type{Integer}, m::SparseVectorMessageDecoder)
+@inline function indiciesFormat(m::SparseVectorMessageDecoder, ::Type{Integer})
     return decode_le(Int8, m.buffer, m.offset + 65)
 end
 @inline function indiciesFormat(m::SparseVectorMessageDecoder)
@@ -126,7 +134,7 @@ indexing_since_version(::SparseVectorMessage) = UInt16(0x0)
 indexing_in_acting_version(m::SparseVectorMessage) = sbe_acting_version(m) >= UInt16(0x0)
 indexing_encoding_offset(::SparseVectorMessage) = 66
 indexing_encoding_length(::SparseVectorMessage) = 1
-@inline function indexing(::Type{Integer}, m::SparseVectorMessageDecoder)
+@inline function indexing(m::SparseVectorMessageDecoder, ::Type{Integer})
     return decode_le(Int8, m.buffer, m.offset + 66)
 end
 @inline function indexing(m::SparseVectorMessageDecoder)
@@ -185,11 +193,8 @@ indicies_header_length(::SparseVectorMessage) = 4
 end
 
 @inline function indicies_length!(m::SparseVectorMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
-        error("buffer too short for data length")
-    elseif n > 1073741824
-        error("data length too large for length type")
-    end
+    @boundscheck n > 1073741824 && throw(ArgumentError("length exceeds schema limit"))
+    @boundscheck checkbounds(m.buffer, sbe_position(m) + 4 + n)
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
@@ -207,14 +212,18 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-indicies(::Type{<:AbstractString}, m::SparseVectorMessageDecoder) = StringView(rstrip_nul(indicies(m)))
-indicies(::Type{<:Symbol}, m::SparseVectorMessageDecoder) = Symbol(indicies(StringView, m))
+@inline indicies(m::SparseVectorMessageDecoder, ::Type{AbstractArray{T}}) where {T<:Real} = reinterpret(T, indicies(m))
+@inline indicies(m::SparseVectorMessageDecoder, ::Type{NTuple{N,T}}) where {N,T<:Real} = (x = reinterpret(T, indicies(m)); ntuple(i -> x[i], Val(N)))
+@inline indicies(m::SparseVectorMessageDecoder, ::Type{T}) where {T<:AbstractString} = StringView(rstrip_nul(indicies(m)))
+@inline indicies(m::SparseVectorMessageDecoder, ::Type{T}) where {T<:Symbol} = Symbol(indicies(m, StringView))
+@inline indicies(m::SparseVectorMessageDecoder, ::Type{T}) where {T<:Real} = reinterpret(T, indicies(m))[]
+@inline indicies(m::SparseVectorMessageDecoder, ::Type{T}) where {T<:Nothing} = (skip_indicies!(m); nothing)
 
-@inline function indicies!(m::SparseVectorMessageEncoder; length::Int64)
-    indicies_length!(m, length)
+@inline function indicies_buffer!(m::SparseVectorMessageEncoder, len)
+    indicies_length!(m, len)
     pos = sbe_position(m) + 4
-    sbe_position!(m, pos + length)
-    return view(m.buffer, pos+1:pos+length)
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
 end
 
 @inline function indicies!(m::SparseVectorMessageEncoder, src::AbstractArray)
@@ -226,13 +235,13 @@ end
     copyto!(dest, reinterpret(UInt8, src))
 end
 
-@inline function indicies!(m::SparseVectorMessageEncoder, src::NTuple{N,T}) where {N,T}
+@inline function indicies!(m::SparseVectorMessageEncoder, src::NTuple)
     len = sizeof(src)
     indicies_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+    copyto!(dest, reinterpret(NTuple{len,UInt8}, src))
 end
 
 @inline function indicies!(m::SparseVectorMessageEncoder, src::AbstractString)
@@ -244,7 +253,10 @@ end
     copyto!(dest, transcode(UInt8, src))
 end
 
-indicies!(m::SparseVectorMessageEncoder, src::Symbol) = indicies!(m, to_string(src))
+@inline indicies!(m::SparseVectorMessageEncoder, src::Symbol) = indicies!(m, to_string(src))
+@inline indicies!(m::SparseVectorMessageEncoder, src::StaticString) = indicies!(m, Tuple(src))
+@inline indicies!(m::SparseVectorMessageEncoder, src::Real) = indicies!(m, Tuple(src))
+@inline indicies!(m::SparseVectorMessageEncoder, ::Nothing) = indicies_buffer!(m, 0)
 
 function values_meta_attribute(::SparseVectorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
@@ -261,11 +273,8 @@ values_header_length(::SparseVectorMessage) = 4
 end
 
 @inline function values_length!(m::SparseVectorMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
-        error("buffer too short for data length")
-    elseif n > 1073741824
-        error("data length too large for length type")
-    end
+    @boundscheck n > 1073741824 && throw(ArgumentError("length exceeds schema limit"))
+    @boundscheck checkbounds(m.buffer, sbe_position(m) + 4 + n)
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
@@ -283,14 +292,18 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-values(::Type{<:AbstractString}, m::SparseVectorMessageDecoder) = StringView(rstrip_nul(values(m)))
-values(::Type{<:Symbol}, m::SparseVectorMessageDecoder) = Symbol(values(StringView, m))
+@inline values(m::SparseVectorMessageDecoder, ::Type{AbstractArray{T}}) where {T<:Real} = reinterpret(T, values(m))
+@inline values(m::SparseVectorMessageDecoder, ::Type{NTuple{N,T}}) where {N,T<:Real} = (x = reinterpret(T, values(m)); ntuple(i -> x[i], Val(N)))
+@inline values(m::SparseVectorMessageDecoder, ::Type{T}) where {T<:AbstractString} = StringView(rstrip_nul(values(m)))
+@inline values(m::SparseVectorMessageDecoder, ::Type{T}) where {T<:Symbol} = Symbol(values(m, StringView))
+@inline values(m::SparseVectorMessageDecoder, ::Type{T}) where {T<:Real} = reinterpret(T, values(m))[]
+@inline values(m::SparseVectorMessageDecoder, ::Type{T}) where {T<:Nothing} = (skip_values!(m); nothing)
 
-@inline function values!(m::SparseVectorMessageEncoder; length::Int64)
-    values_length!(m, length)
+@inline function values_buffer!(m::SparseVectorMessageEncoder, len)
+    values_length!(m, len)
     pos = sbe_position(m) + 4
-    sbe_position!(m, pos + length)
-    return view(m.buffer, pos+1:pos+length)
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
 end
 
 @inline function values!(m::SparseVectorMessageEncoder, src::AbstractArray)
@@ -302,13 +315,13 @@ end
     copyto!(dest, reinterpret(UInt8, src))
 end
 
-@inline function values!(m::SparseVectorMessageEncoder, src::NTuple{N,T}) where {N,T}
+@inline function values!(m::SparseVectorMessageEncoder, src::NTuple)
     len = sizeof(src)
     values_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+    copyto!(dest, reinterpret(NTuple{len,UInt8}, src))
 end
 
 @inline function values!(m::SparseVectorMessageEncoder, src::AbstractString)
@@ -320,7 +333,10 @@ end
     copyto!(dest, transcode(UInt8, src))
 end
 
-values!(m::SparseVectorMessageEncoder, src::Symbol) = values!(m, to_string(src))
+@inline values!(m::SparseVectorMessageEncoder, src::Symbol) = values!(m, to_string(src))
+@inline values!(m::SparseVectorMessageEncoder, src::StaticString) = values!(m, Tuple(src))
+@inline values!(m::SparseVectorMessageEncoder, src::Real) = values!(m, Tuple(src))
+@inline values!(m::SparseVectorMessageEncoder, ::Nothing) = values_buffer!(m, 0)
 
 function show(io::IO, m::SparseVectorMessage{T}) where {T}
     println(io, "SparseVectorMessage view over a type $T")

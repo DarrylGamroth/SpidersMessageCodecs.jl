@@ -34,9 +34,4 @@ Base.convert(::Type{SpidersMessageCodecs.Format.SbeEnum}, ::Type{<:AbstractStrin
 Base.convert(::Type{SpidersMessageCodecs.Format.SbeEnum}, ::Type{<:AbstractVector{UInt8}}) = SpidersMessageCodecs.Format.BYTES
 Base.convert(::Type{SpidersMessageCodecs.Format.SbeEnum}, ::Type{<:BitArray}) = SpidersMessageCodecs.Format.BIT
 Base.convert(::Type{SpidersMessageCodecs.Format.SbeEnum}, ::Type{Symbol}) = SpidersMessageCodecs.Format.STRING
-Base.convert(::Type{SpidersMessageCodecs.Format.SbeEnum}, ::Type{<:SbeType}) = SpidersMessageCodecs.Format.SBE
 Base.convert(::Type{SpidersMessageCodecs.Format.SbeEnum}, ::Type{<:Enum}) = SpidersMessageCodecs.Format.INT64
-
-function Base.convert(::Type{SpidersMessageCodecs.Format.SbeEnum}, ::Type{T}) where {T}
-    is_sbe_message(T) ? SpidersMessageCodecs.Format.SBE : throw(ArgumentError("unexpected type"))
-end

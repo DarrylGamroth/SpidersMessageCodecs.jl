@@ -17,13 +17,14 @@ struct TensorMessageDecoder{T<:AbstractArray{UInt8}} <: TensorMessage{T}
     end
 end
 
-struct TensorMessageEncoder{T<:AbstractArray{UInt8}} <: TensorMessage{T}
+struct TensorMessageEncoder{T<:AbstractArray{UInt8},HasSbeHeader} <: TensorMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    function TensorMessageEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64}) where {T}
+    function TensorMessageEncoder(buffer::T, offset::Integer,
+        position_ptr::Ref{Int64}, hasSbeHeader::Bool=false) where {T}
         position_ptr[] = offset + 68
-        new{T}(buffer, offset, position_ptr)
+        new{T,hasSbeHeader}(buffer, offset, position_ptr)
     end
 end
 
@@ -31,7 +32,7 @@ end
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
     if templateId(header) != UInt16(0xa) || schemaId(header) != UInt16(0x1)
-        error("Template id or schema id mismatch")
+        throw(DomainError("Template id or schema id mismatch"))
     end
     TensorMessageDecoder(buffer, offset + sbe_encoded_length(header), position_ptr,
         blockLength(header), version(header))
@@ -43,7 +44,7 @@ end
     templateId!(header, UInt16(0xa))
     schemaId!(header, UInt16(0x1))
     version!(header, UInt16(0x0))
-    TensorMessageEncoder(buffer, offset + sbe_encoded_length(header), position_ptr)
+    TensorMessageEncoder(buffer, offset + sbe_encoded_length(header), position_ptr, true)
 end
 sbe_buffer(m::TensorMessage) = m.buffer
 sbe_offset(m::TensorMessage) = m.offset
@@ -73,6 +74,13 @@ sbe_encoded_length(m::TensorMessage) = sbe_position(m) - m.offset
     sbe_encoded_length(skipper)
 end
 
+function Base.convert(::Type{AbstractArray{UInt8}}, m::TensorMessageEncoder{<:AbstractArray{UInt8},true})
+    return view(m.buffer, m.offset+1-sbe_encoded_length(MessageHeader):m.offset+sbe_encoded_length(m))
+end
+function Base.convert(::Type{AbstractArray{UInt8}}, m::TensorMessageEncoder{<:AbstractArray{UInt8},false})
+    return view(m.buffer, m.offset+1:m.offset+sbe_encoded_length(m))
+end
+
 function header_meta_attribute(::TensorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
@@ -92,7 +100,7 @@ format_since_version(::TensorMessage) = UInt16(0x0)
 format_in_acting_version(m::TensorMessage) = sbe_acting_version(m) >= UInt16(0x0)
 format_encoding_offset(::TensorMessage) = 64
 format_encoding_length(::TensorMessage) = 1
-@inline function format(::Type{Integer}, m::TensorMessageDecoder)
+@inline function format(m::TensorMessageDecoder, ::Type{Integer})
     return decode_le(Int8, m.buffer, m.offset + 64)
 end
 @inline function format(m::TensorMessageDecoder)
@@ -100,22 +108,22 @@ end
 end
 @inline format!(m::TensorMessageEncoder, value::Format.SbeEnum) = encode_le(Int8, m.buffer, m.offset + 64, Int8(value))
 
-function order_meta_attribute(::TensorMessage, meta_attribute)
+function majorOrder_meta_attribute(::TensorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")
 end
-order_id(::TensorMessage) = UInt16(0x3)
-order_since_version(::TensorMessage) = UInt16(0x0)
-order_in_acting_version(m::TensorMessage) = sbe_acting_version(m) >= UInt16(0x0)
-order_encoding_offset(::TensorMessage) = 65
-order_encoding_length(::TensorMessage) = 1
-@inline function order(::Type{Integer}, m::TensorMessageDecoder)
+majorOrder_id(::TensorMessage) = UInt16(0x3)
+majorOrder_since_version(::TensorMessage) = UInt16(0x0)
+majorOrder_in_acting_version(m::TensorMessage) = sbe_acting_version(m) >= UInt16(0x0)
+majorOrder_encoding_offset(::TensorMessage) = 65
+majorOrder_encoding_length(::TensorMessage) = 1
+@inline function majorOrder(m::TensorMessageDecoder, ::Type{Integer})
     return decode_le(Int8, m.buffer, m.offset + 65)
 end
-@inline function order(m::TensorMessageDecoder)
+@inline function majorOrder(m::TensorMessageDecoder)
     return MajorOrder.SbeEnum(decode_le(Int8, m.buffer, m.offset + 65))
 end
-@inline order!(m::TensorMessageEncoder, value::MajorOrder.SbeEnum) = encode_le(Int8, m.buffer, m.offset + 65, Int8(value))
+@inline majorOrder!(m::TensorMessageEncoder, value::MajorOrder.SbeEnum) = encode_le(Int8, m.buffer, m.offset + 65, Int8(value))
 
 function reserved1_meta_attribute(::TensorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
@@ -136,7 +144,7 @@ reserved1_eltype(::TensorMessage) = Int8
     return mappedarray(ltoh, reinterpret(Int8, view(m.buffer, m.offset+66+1:m.offset+66+sizeof(Int8)*2)))
 end
 
-@inline function reserved1(::Type{<:SVector},m::TensorMessageDecoder)
+@inline function reserved1(m::TensorMessageDecoder, ::Type{<:SVector})
     return mappedarray(ltoh, reinterpret(SVector{2,Int8}, view(m.buffer, m.offset+66+1:m.offset+66+sizeof(Int8)*2))[])
 end
 
@@ -163,11 +171,8 @@ dims_header_length(::TensorMessage) = 4
 end
 
 @inline function dims_length!(m::TensorMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
-        error("buffer too short for data length")
-    elseif n > 1073741824
-        error("data length too large for length type")
-    end
+    @boundscheck n > 1073741824 && throw(ArgumentError("length exceeds schema limit"))
+    @boundscheck checkbounds(m.buffer, sbe_position(m) + 4 + n)
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
@@ -185,14 +190,18 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-dims(::Type{<:AbstractString}, m::TensorMessageDecoder) = StringView(rstrip_nul(dims(m)))
-dims(::Type{<:Symbol}, m::TensorMessageDecoder) = Symbol(dims(StringView, m))
+@inline dims(m::TensorMessageDecoder, ::Type{AbstractArray{T}}) where {T<:Real} = reinterpret(T, dims(m))
+@inline dims(m::TensorMessageDecoder, ::Type{NTuple{N,T}}) where {N,T<:Real} = (x = reinterpret(T, dims(m)); ntuple(i -> x[i], Val(N)))
+@inline dims(m::TensorMessageDecoder, ::Type{T}) where {T<:AbstractString} = StringView(rstrip_nul(dims(m)))
+@inline dims(m::TensorMessageDecoder, ::Type{T}) where {T<:Symbol} = Symbol(dims(m, StringView))
+@inline dims(m::TensorMessageDecoder, ::Type{T}) where {T<:Real} = reinterpret(T, dims(m))[]
+@inline dims(m::TensorMessageDecoder, ::Type{T}) where {T<:Nothing} = (skip_dims!(m); nothing)
 
-@inline function dims!(m::TensorMessageEncoder; length::Int64)
-    dims_length!(m, length)
+@inline function dims_buffer!(m::TensorMessageEncoder, len)
+    dims_length!(m, len)
     pos = sbe_position(m) + 4
-    sbe_position!(m, pos + length)
-    return view(m.buffer, pos+1:pos+length)
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
 end
 
 @inline function dims!(m::TensorMessageEncoder, src::AbstractArray)
@@ -204,13 +213,13 @@ end
     copyto!(dest, reinterpret(UInt8, src))
 end
 
-@inline function dims!(m::TensorMessageEncoder, src::NTuple{N,T}) where {N,T}
+@inline function dims!(m::TensorMessageEncoder, src::NTuple)
     len = sizeof(src)
     dims_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+    copyto!(dest, reinterpret(NTuple{len,UInt8}, src))
 end
 
 @inline function dims!(m::TensorMessageEncoder, src::AbstractString)
@@ -222,7 +231,10 @@ end
     copyto!(dest, transcode(UInt8, src))
 end
 
-dims!(m::TensorMessageEncoder, src::Symbol) = dims!(m, to_string(src))
+@inline dims!(m::TensorMessageEncoder, src::Symbol) = dims!(m, to_string(src))
+@inline dims!(m::TensorMessageEncoder, src::StaticString) = dims!(m, Tuple(src))
+@inline dims!(m::TensorMessageEncoder, src::Real) = dims!(m, Tuple(src))
+@inline dims!(m::TensorMessageEncoder, ::Nothing) = dims_buffer!(m, 0)
 
 function origin_meta_attribute(::TensorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
@@ -239,11 +251,8 @@ origin_header_length(::TensorMessage) = 4
 end
 
 @inline function origin_length!(m::TensorMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
-        error("buffer too short for data length")
-    elseif n > 1073741824
-        error("data length too large for length type")
-    end
+    @boundscheck n > 1073741824 && throw(ArgumentError("length exceeds schema limit"))
+    @boundscheck checkbounds(m.buffer, sbe_position(m) + 4 + n)
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
@@ -261,14 +270,18 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-origin(::Type{<:AbstractString}, m::TensorMessageDecoder) = StringView(rstrip_nul(origin(m)))
-origin(::Type{<:Symbol}, m::TensorMessageDecoder) = Symbol(origin(StringView, m))
+@inline origin(m::TensorMessageDecoder, ::Type{AbstractArray{T}}) where {T<:Real} = reinterpret(T, origin(m))
+@inline origin(m::TensorMessageDecoder, ::Type{NTuple{N,T}}) where {N,T<:Real} = (x = reinterpret(T, origin(m)); ntuple(i -> x[i], Val(N)))
+@inline origin(m::TensorMessageDecoder, ::Type{T}) where {T<:AbstractString} = StringView(rstrip_nul(origin(m)))
+@inline origin(m::TensorMessageDecoder, ::Type{T}) where {T<:Symbol} = Symbol(origin(m, StringView))
+@inline origin(m::TensorMessageDecoder, ::Type{T}) where {T<:Real} = reinterpret(T, origin(m))[]
+@inline origin(m::TensorMessageDecoder, ::Type{T}) where {T<:Nothing} = (skip_origin!(m); nothing)
 
-@inline function origin!(m::TensorMessageEncoder; length::Int64)
-    origin_length!(m, length)
+@inline function origin_buffer!(m::TensorMessageEncoder, len)
+    origin_length!(m, len)
     pos = sbe_position(m) + 4
-    sbe_position!(m, pos + length)
-    return view(m.buffer, pos+1:pos+length)
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
 end
 
 @inline function origin!(m::TensorMessageEncoder, src::AbstractArray)
@@ -280,13 +293,13 @@ end
     copyto!(dest, reinterpret(UInt8, src))
 end
 
-@inline function origin!(m::TensorMessageEncoder, src::NTuple{N,T}) where {N,T}
+@inline function origin!(m::TensorMessageEncoder, src::NTuple)
     len = sizeof(src)
     origin_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+    copyto!(dest, reinterpret(NTuple{len,UInt8}, src))
 end
 
 @inline function origin!(m::TensorMessageEncoder, src::AbstractString)
@@ -298,7 +311,10 @@ end
     copyto!(dest, transcode(UInt8, src))
 end
 
-origin!(m::TensorMessageEncoder, src::Symbol) = origin!(m, to_string(src))
+@inline origin!(m::TensorMessageEncoder, src::Symbol) = origin!(m, to_string(src))
+@inline origin!(m::TensorMessageEncoder, src::StaticString) = origin!(m, Tuple(src))
+@inline origin!(m::TensorMessageEncoder, src::Real) = origin!(m, Tuple(src))
+@inline origin!(m::TensorMessageEncoder, ::Nothing) = origin_buffer!(m, 0)
 
 function values_meta_attribute(::TensorMessage, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
@@ -315,11 +331,8 @@ values_header_length(::TensorMessage) = 4
 end
 
 @inline function values_length!(m::TensorMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
-        error("buffer too short for data length")
-    elseif n > 1073741824
-        error("data length too large for length type")
-    end
+    @boundscheck n > 1073741824 && throw(ArgumentError("length exceeds schema limit"))
+    @boundscheck checkbounds(m.buffer, sbe_position(m) + 4 + n)
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
@@ -337,14 +350,18 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-values(::Type{<:AbstractString}, m::TensorMessageDecoder) = StringView(rstrip_nul(values(m)))
-values(::Type{<:Symbol}, m::TensorMessageDecoder) = Symbol(values(StringView, m))
+@inline values(m::TensorMessageDecoder, ::Type{AbstractArray{T}}) where {T<:Real} = reinterpret(T, values(m))
+@inline values(m::TensorMessageDecoder, ::Type{NTuple{N,T}}) where {N,T<:Real} = (x = reinterpret(T, values(m)); ntuple(i -> x[i], Val(N)))
+@inline values(m::TensorMessageDecoder, ::Type{T}) where {T<:AbstractString} = StringView(rstrip_nul(values(m)))
+@inline values(m::TensorMessageDecoder, ::Type{T}) where {T<:Symbol} = Symbol(values(m, StringView))
+@inline values(m::TensorMessageDecoder, ::Type{T}) where {T<:Real} = reinterpret(T, values(m))[]
+@inline values(m::TensorMessageDecoder, ::Type{T}) where {T<:Nothing} = (skip_values!(m); nothing)
 
-@inline function values!(m::TensorMessageEncoder; length::Int64)
-    values_length!(m, length)
+@inline function values_buffer!(m::TensorMessageEncoder, len)
+    values_length!(m, len)
     pos = sbe_position(m) + 4
-    sbe_position!(m, pos + length)
-    return view(m.buffer, pos+1:pos+length)
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
 end
 
 @inline function values!(m::TensorMessageEncoder, src::AbstractArray)
@@ -356,13 +373,13 @@ end
     copyto!(dest, reinterpret(UInt8, src))
 end
 
-@inline function values!(m::TensorMessageEncoder, src::NTuple{N,T}) where {N,T}
+@inline function values!(m::TensorMessageEncoder, src::NTuple)
     len = sizeof(src)
     values_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+    copyto!(dest, reinterpret(NTuple{len,UInt8}, src))
 end
 
 @inline function values!(m::TensorMessageEncoder, src::AbstractString)
@@ -374,7 +391,10 @@ end
     copyto!(dest, transcode(UInt8, src))
 end
 
-values!(m::TensorMessageEncoder, src::Symbol) = values!(m, to_string(src))
+@inline values!(m::TensorMessageEncoder, src::Symbol) = values!(m, to_string(src))
+@inline values!(m::TensorMessageEncoder, src::StaticString) = values!(m, Tuple(src))
+@inline values!(m::TensorMessageEncoder, src::Real) = values!(m, Tuple(src))
+@inline values!(m::TensorMessageEncoder, ::Nothing) = values_buffer!(m, 0)
 
 function show(io::IO, m::TensorMessage{T}) where {T}
     println(io, "TensorMessage view over a type $T")
@@ -393,8 +413,8 @@ function show(io::IO, m::TensorMessage{T}) where {T}
     print(io, format(writer))
 
     println(io)
-    print(io, "order: ")
-    print(io, order(writer))
+    print(io, "majorOrder: ")
+    print(io, majorOrder(writer))
 
     println(io)
     print(io, "reserved1: ")

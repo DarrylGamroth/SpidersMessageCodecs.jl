@@ -121,7 +121,7 @@
             id="2"
             description="Element data format"
             type="Format" />
-        <field name="order"
+        <field name="majorOrder"
             id="3"
             description="Ordering of data in tensor (column or row major)"
             type="MajorOrder" />
@@ -153,7 +153,7 @@
             id="2"
             description="Element data format"
             type="Format" />
-        <field name="order"
+        <field name="majorOrder"
             id="3"
             description="Ordering of data in matrix"
             type="MajorOrder" />
@@ -261,7 +261,7 @@
             id="3"
             description="Element data format"
             type="Format" />
-        <field name="order"
+        <field name="majorOrder"
             id="4"
             description="Ordering of data in tensor (column or row major)"
             type="MajorOrder" />

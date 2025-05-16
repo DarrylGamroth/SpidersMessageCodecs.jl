@@ -17,13 +17,14 @@ struct TensorStreamDataMessageDecoder{T<:AbstractArray{UInt8}} <: TensorStreamDa
     end
 end
 
-struct TensorStreamDataMessageEncoder{T<:AbstractArray{UInt8}} <: TensorStreamDataMessage{T}
+struct TensorStreamDataMessageEncoder{T<:AbstractArray{UInt8},HasSbeHeader} <: TensorStreamDataMessage{T}
     buffer::T
     offset::Int64
     position_ptr::Base.RefValue{Int64}
-    function TensorStreamDataMessageEncoder(buffer::T, offset::Integer, position_ptr::Ref{Int64}) where {T}
+    function TensorStreamDataMessageEncoder(buffer::T, offset::Integer,
+        position_ptr::Ref{Int64}, hasSbeHeader::Bool=false) where {T}
         position_ptr[] = offset + 80
-        new{T}(buffer, offset, position_ptr)
+        new{T,hasSbeHeader}(buffer, offset, position_ptr)
     end
 end
 
@@ -31,7 +32,7 @@ end
     position_ptr::Base.RefValue{Int64}=Ref(0),
     header::MessageHeader=MessageHeader(buffer, offset))
     if templateId(header) != UInt16(0xf) || schemaId(header) != UInt16(0x1)
-        error("Template id or schema id mismatch")
+        throw(DomainError("Template id or schema id mismatch"))
     end
     TensorStreamDataMessageDecoder(buffer, offset + sbe_encoded_length(header), position_ptr,
         blockLength(header), version(header))
@@ -43,7 +44,7 @@ end
     templateId!(header, UInt16(0xf))
     schemaId!(header, UInt16(0x1))
     version!(header, UInt16(0x0))
-    TensorStreamDataMessageEncoder(buffer, offset + sbe_encoded_length(header), position_ptr)
+    TensorStreamDataMessageEncoder(buffer, offset + sbe_encoded_length(header), position_ptr, true)
 end
 sbe_buffer(m::TensorStreamDataMessage) = m.buffer
 sbe_offset(m::TensorStreamDataMessage) = m.offset
@@ -71,6 +72,13 @@ sbe_encoded_length(m::TensorStreamDataMessage) = sbe_position(m) - m.offset
         sbe_acting_block_length(m), sbe_acting_version(m))
     sbe_skip!(skipper)
     sbe_encoded_length(skipper)
+end
+
+function Base.convert(::Type{AbstractArray{UInt8}}, m::TensorStreamDataMessageEncoder{<:AbstractArray{UInt8},true})
+    return view(m.buffer, m.offset+1-sbe_encoded_length(MessageHeader):m.offset+sbe_encoded_length(m))
+end
+function Base.convert(::Type{AbstractArray{UInt8}}, m::TensorStreamDataMessageEncoder{<:AbstractArray{UInt8},false})
+    return view(m.buffer, m.offset+1:m.offset+sbe_encoded_length(m))
 end
 
 function header_meta_attribute(::TensorStreamDataMessage, meta_attribute)
@@ -134,11 +142,8 @@ chunk_header_length(::TensorStreamDataMessage) = 4
 end
 
 @inline function chunk_length!(m::TensorStreamDataMessageEncoder, n)
-    if !checkbounds(Bool, m.buffer, sbe_position(m) + 4 + n)
-        error("buffer too short for data length")
-    elseif n > 1073741824
-        error("data length too large for length type")
-    end
+    @boundscheck n > 1073741824 && throw(ArgumentError("length exceeds schema limit"))
+    @boundscheck checkbounds(m.buffer, sbe_position(m) + 4 + n)
     return encode_le(UInt32, m.buffer, sbe_position(m), n)
 end
 
@@ -156,14 +161,18 @@ end
     return view(m.buffer, pos+1:pos+len)
 end
 
-chunk(::Type{<:AbstractString}, m::TensorStreamDataMessageDecoder) = StringView(rstrip_nul(chunk(m)))
-chunk(::Type{<:Symbol}, m::TensorStreamDataMessageDecoder) = Symbol(chunk(StringView, m))
+@inline chunk(m::TensorStreamDataMessageDecoder, ::Type{AbstractArray{T}}) where {T<:Real} = reinterpret(T, chunk(m))
+@inline chunk(m::TensorStreamDataMessageDecoder, ::Type{NTuple{N,T}}) where {N,T<:Real} = (x = reinterpret(T, chunk(m)); ntuple(i -> x[i], Val(N)))
+@inline chunk(m::TensorStreamDataMessageDecoder, ::Type{T}) where {T<:AbstractString} = StringView(rstrip_nul(chunk(m)))
+@inline chunk(m::TensorStreamDataMessageDecoder, ::Type{T}) where {T<:Symbol} = Symbol(chunk(m, StringView))
+@inline chunk(m::TensorStreamDataMessageDecoder, ::Type{T}) where {T<:Real} = reinterpret(T, chunk(m))[]
+@inline chunk(m::TensorStreamDataMessageDecoder, ::Type{T}) where {T<:Nothing} = (skip_chunk!(m); nothing)
 
-@inline function chunk!(m::TensorStreamDataMessageEncoder; length::Int64)
-    chunk_length!(m, length)
+@inline function chunk_buffer!(m::TensorStreamDataMessageEncoder, len)
+    chunk_length!(m, len)
     pos = sbe_position(m) + 4
-    sbe_position!(m, pos + length)
-    return view(m.buffer, pos+1:pos+length)
+    sbe_position!(m, pos + len)
+    return view(m.buffer, pos+1:pos+len)
 end
 
 @inline function chunk!(m::TensorStreamDataMessageEncoder, src::AbstractArray)
@@ -175,13 +184,13 @@ end
     copyto!(dest, reinterpret(UInt8, src))
 end
 
-@inline function chunk!(m::TensorStreamDataMessageEncoder, src::NTuple{N,T}) where {N,T}
+@inline function chunk!(m::TensorStreamDataMessageEncoder, src::NTuple)
     len = sizeof(src)
     chunk_length!(m, len)
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, reinterpret(NTuple{N * sizeof(T),UInt8}, src))
+    copyto!(dest, reinterpret(NTuple{len,UInt8}, src))
 end
 
 @inline function chunk!(m::TensorStreamDataMessageEncoder, src::AbstractString)
@@ -193,7 +202,10 @@ end
     copyto!(dest, transcode(UInt8, src))
 end
 
-chunk!(m::TensorStreamDataMessageEncoder, src::Symbol) = chunk!(m, to_string(src))
+@inline chunk!(m::TensorStreamDataMessageEncoder, src::Symbol) = chunk!(m, to_string(src))
+@inline chunk!(m::TensorStreamDataMessageEncoder, src::StaticString) = chunk!(m, Tuple(src))
+@inline chunk!(m::TensorStreamDataMessageEncoder, src::Real) = chunk!(m, Tuple(src))
+@inline chunk!(m::TensorStreamDataMessageEncoder, ::Nothing) = chunk_buffer!(m, 0)
 
 function show(io::IO, m::TensorStreamDataMessage{T}) where {T}
     println(io, "TensorStreamDataMessage view over a type $T")

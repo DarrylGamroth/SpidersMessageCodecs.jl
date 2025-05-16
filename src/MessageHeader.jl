@@ -23,6 +23,10 @@ sbe_schema_id(::Type{<:MessageHeader}) = UInt16(0x1)
 sbe_schema_version(::MessageHeader) = UInt16(0x0)
 sbe_schema_version(::Type{<:MessageHeader}) = UInt16(0x0)
 
+function Base.convert(::Type{<:AbstractArray{UInt8}}, m::MessageHeaderEncoder)
+    return view(m.buffer, m.offset+1:m.offset+sbe_encoded_length(m))
+end
+
 function blockLength_meta_attribute(::MessageHeader, meta_attribute)
     meta_attribute === :presence && return Symbol("required")
     return Symbol("")

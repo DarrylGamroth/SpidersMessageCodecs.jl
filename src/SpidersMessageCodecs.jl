@@ -6,6 +6,7 @@ module SpidersMessageCodecs
 using EnumX
 using MappedArrays
 using StaticArrays
+using StaticStrings
 using StringViews
 using UnsafeArrays
 
