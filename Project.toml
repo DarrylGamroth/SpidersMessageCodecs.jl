@@ -1,7 +1,7 @@
 name = "SpidersMessageCodecs"
 uuid = "9d30338e-3560-4e91-a403-22803ac6b660"
 authors = ["Darryl Gamroth <dgamroth@rubus.ca>"]
-version = "0.10.0"
+version = "0.11.0"
 
 [deps]
 EnumX = "4e289a0a-7415-4d19-859d-a7e5c4648b56"

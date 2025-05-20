@@ -74,6 +74,7 @@ sbe_encoded_length(m::SparseVectorMessage) = sbe_position(m) - m.offset
     sbe_encoded_length(skipper)
 end
 
+Base.sizeof(m::SparseVectorMessage) = sbe_decoded_length(m)
 function Base.convert(::Type{AbstractArray{UInt8}}, m::SparseVectorMessageEncoder{<:AbstractArray{UInt8},true})
     return view(m.buffer, m.offset+1-sbe_encoded_length(MessageHeader):m.offset+sbe_encoded_length(m))
 end
