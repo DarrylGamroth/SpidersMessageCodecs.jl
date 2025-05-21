@@ -306,7 +306,7 @@ end
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, transcode(UInt8, src))
+    copyto!(dest, codeunits(src))
 end
 
 @inline key!(m::ChunkHeaderMessageMetadataEncoder, src::Symbol) = key!(m, to_string(src))
@@ -386,7 +386,7 @@ end
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, transcode(UInt8, src))
+    copyto!(dest, codeunits(src))
 end
 
 @inline value!(m::ChunkHeaderMessageMetadataEncoder, src::Symbol) = value!(m, to_string(src))

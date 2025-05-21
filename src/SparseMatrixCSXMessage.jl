@@ -264,7 +264,7 @@ end
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, transcode(UInt8, src))
+    copyto!(dest, codeunits(src))
 end
 
 @inline indexPointer!(m::SparseMatrixCSXMessageEncoder, src::Symbol) = indexPointer!(m, to_string(src))
@@ -344,7 +344,7 @@ end
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, transcode(UInt8, src))
+    copyto!(dest, codeunits(src))
 end
 
 @inline indicies!(m::SparseMatrixCSXMessageEncoder, src::Symbol) = indicies!(m, to_string(src))
@@ -424,7 +424,7 @@ end
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, transcode(UInt8, src))
+    copyto!(dest, codeunits(src))
 end
 
 @inline values!(m::SparseMatrixCSXMessageEncoder, src::Symbol) = values!(m, to_string(src))

@@ -22,6 +22,7 @@ sbe_schema_id(::SpidersMessageHeader) = UInt16(0x1)
 sbe_schema_id(::Type{<:SpidersMessageHeader}) = UInt16(0x1)
 sbe_schema_version(::SpidersMessageHeader) = UInt16(0x0)
 sbe_schema_version(::Type{<:SpidersMessageHeader}) = UInt16(0x0)
+Base.sizeof(m::SpidersMessageHeader) = sbe_encoded_length(m)
 
 function Base.convert(::Type{<:AbstractArray{UInt8}}, m::SpidersMessageHeaderEncoder)
     return view(m.buffer, m.offset+1:m.offset+sbe_encoded_length(m))

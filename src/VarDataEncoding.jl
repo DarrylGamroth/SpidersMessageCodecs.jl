@@ -22,6 +22,7 @@ sbe_schema_id(::VarDataEncoding) = UInt16(0x1)
 sbe_schema_id(::Type{<:VarDataEncoding}) = UInt16(0x1)
 sbe_schema_version(::VarDataEncoding) = UInt16(0x0)
 sbe_schema_version(::Type{<:VarDataEncoding}) = UInt16(0x0)
+Base.sizeof(m::VarDataEncoding) = sbe_encoded_length(m)
 
 function Base.convert(::Type{<:AbstractArray{UInt8}}, m::VarDataEncodingEncoder)
     return view(m.buffer, m.offset+1:m.offset+sbe_encoded_length(m))

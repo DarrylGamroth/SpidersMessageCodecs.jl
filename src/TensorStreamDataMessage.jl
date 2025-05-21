@@ -200,7 +200,7 @@ end
     pos = sbe_position(m) + 4
     sbe_position!(m, pos + len)
     dest = view(m.buffer, pos+1:pos+len)
-    copyto!(dest, transcode(UInt8, src))
+    copyto!(dest, codeunits(src))
 end
 
 @inline chunk!(m::TensorStreamDataMessageEncoder, src::Symbol) = chunk!(m, to_string(src))
