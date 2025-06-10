@@ -19,12 +19,13 @@ abstract type AbstractTensorMessageArray{T,N,O} end
 @inline function _decode(::Type{<:AbstractTensorMessageArray{T,N,O}}, m::TensorMessageDecoder) where {T,N,O}
     sbe_rewind!(m)
 
-    # FIXME these checks slow down the code
-    # type = Base.eltype(format(m))
-    # T <: type || error("Unexpected data type, expected $T but got $type")
+    @static if get(ENV, "SPIDERS_VALIDATE_DECODE", "false") == "true"
+        type = Base.eltype(SpidersMessageCodecs.format(m))
+        T <: type || error("Unexpected data type, expected $T but got $type")
 
-    # majorOrder = SpidersMessageCodecs.majorOrder(m)
-    # O == majorOrder || error("Unexpected majorOrder, expected $O but got $majorOrder")
+        majorOrder = SpidersMessageCodecs.majorOrder(m)
+        O == majorOrder || error("Unexpected majorOrder, expected $O but got $majorOrder")
+    end
 
     dims = SpidersMessageCodecs.dims(m, NTuple{N,Int32})
     SpidersMessageCodecs.skip_origin!(m)
@@ -46,8 +47,8 @@ end
     SpidersMessageCodecs.majorOrder!(m, O)
 
     SpidersMessageCodecs.dims!(m, Int32.(dims))
-    SpidersMessageCodecs.origin!(m, origin===nothing ? nothing : Int32.(origin))
-    data = reinterpret(T, SpidersMessageCodecs.values_buffer!(m, prod(dims)*sizeof(T)))
+    SpidersMessageCodecs.origin!(m, origin === nothing ? nothing : Int32.(origin))
+    data = reinterpret(T, SpidersMessageCodecs.values_buffer!(m, prod(dims) * sizeof(T)))
     reshape(data, dims)
 end
 
