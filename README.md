@@ -136,4 +136,4 @@ Contributions are welcome! Please ensure:
 ## Related Projects
 
 - [SBE (Simple Binary Encoding)](https://real-logic.github.io/simple-binary-encoding/) - The binary format specification
-- [Aeron.jl](https://github.com/package/Aeron.jl) - High-performance messaging (compatible transport)
+- [Aeron.jl](https://github.com/DarrylGamroth/Aeron.jl) - High-performance messaging (compatible transport)
